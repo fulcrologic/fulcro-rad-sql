@@ -2,3 +2,108 @@
 
 A plugin for using SQL databases with Fulcro RAD (UNSTABLE)
 
+== Configuration
+
+In order to use the SQL plugin you must use Fulcro config support and
+include configuration for data pools. You may also optionally turn on
+schema management/generation.
+
+The general layout of a config (which commonly includes `config/defaults.edn` on your
+classpath) should include:
+
+[source, clojure]
+-----
+...
+ :com.fulcrologic.rad.database-adapters.sql/databases
+   {:main {:sql/schema         :production
+           :hikaricp/config    {... see below ...}}}
+...
+-----
+
+The primary keys in the databases section are database names. You may have any
+number of databases in your application. Each database uses a schema name, which
+defines which attributes in your model belong in that database.
+
+This allows you to do things like create more than one database with the
+same schema and shard users across them.
+
+=== Database Connection Pools
+
+This library includes a wrapper for HikariCP connection pools. You should
+configure it according to the documentation of that library by including
+settings for the following options in the application configuration
+(where each entry will become a Property for HikariCP):
+
+[source, clojure]
+-----
+...
+ :com.fulcrologic.rad.database-adapters.sql/databases
+   {:main {:hikaricp/config          {"dataSourceClassName"     "org.postgresql.ds.PGSimpleDataSource"
+                                      "dataSource.user"         "postgres"
+                                      "dataSource.password"     ""
+                                      "dataSource.databaseName" "example"
+                                      "dataSource.portNumber"   "5432"
+                                      "dataSource.serverName"   "localhost"}
+           :sql/auto-create-missing? false
+           ...}}
+...
+-----
+
+=== Schema Generation
+
+You can enable basic schema generation with the following configuration:
+
+[source, clojure]
+-----
+...
+ :com.fulcrologic.rad.database-adapters.sql/databases
+   {:main {...
+           :sql/auto-create-missing? true
+           ...}}
+...
+-----
+
+The automatic schema generation just tries to generate columns in tables if (and only if) they do
+not already exist. This is reasonable for really fast startup of a project, but is almost ceratinly
+insufficient for real projects.
+
+As such this plugin includes functions that can leverage Flyway to execute migrations.
+
+=== Schema Validation
+
+TODO. It would be nice if there was a system that could verify that the declared
+attributes actually exist and at least have the correct type on the database.
+
+=== Using Flyway
+
+See the Flyway documentation for specific details, but the bases are as follows:
+
+1. Create migrations with names like `Vx.y.z__description.sql` in
+`config/sql_migrations` (on the CLASSPATH).
+2. Include the following in your application configuration:
+
+[source, clojure]
+-----
+...
+ :com.fulcrologic.rad.database-adapters.sql/databases
+   {:main {:flyway/migrate?          true
+           :flyway/migrations        ["classpath:config/sql_migrations"]
+           ...}}
+...
+-----
+
+== Attributes
+
+RAD attributes that will be used in an SQL database can be configured as
+follows (where the sql namespace is `com.fulcrologic.rad.database-adapters.sql`):
+
+`::sql/tables`:: (required) A set of strings. For identity attributes this set
+MUST contain exactly ONE table name. Other attributes may be designated to
+live in more than one table.
+`::sql/column-name`:: (optional) A string to use as the SQL table name. If not
+supplied it uses the `(name attr-key)`, which may not be a valid SQL identifier.
+`::sql/schema`:: (required) A keyword. Defines which schema this attribute is
+meant to be used in, which affects generation of schema and resolvers.
+
+TODO: Relations support.
+
