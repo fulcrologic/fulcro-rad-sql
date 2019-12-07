@@ -134,8 +134,8 @@
 
 (defn column-names [attributes query]
   (let [desired-keys       (->> query eql/query->ast :children (map :dispatch-key) set)
-        desired-attributes (filter #(contains? desired-keys (::attr/qualified-key %)) attributes)]
-    (map attr->column-name desired-attributes)))
+        desired-attributes (filterv #(contains? desired-keys (::attr/qualified-key %)) attributes)]
+    (mapv attr->column-name desired-attributes)))
 
 (defn entity-query
   [{::keys [schema attributes id-attribute] :as env} input]
@@ -175,10 +175,6 @@
 (defn id-resolver [id-attr attributes]
   (enc/if-let [id-key        (::attr/qualified-key id-attr)
                outputs       (attr/attributes->eql attributes)
-               attribute-map (into {}
-                               (map (fn [{::attr/keys [qualified-key] :as attr}]
-                                      [qualified-key attr]))
-                               attributes)
                schema        (::schema id-attr)]
     {::pc/sym     (symbol
                     (str (namespace id-key))
@@ -188,7 +184,7 @@
      ::pc/resolve (fn [env input] (->>
                                     (entity-query
                                       (assoc env
-                                        ::attributes attribute-map
+                                        ::attributes attributes
                                         ::id-attribute id-attr
                                         ::schema schema
                                         ::attr/qualified-key id-key
