@@ -14,6 +14,7 @@
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.util Properties)))
+
 (def type-map
   {:string   "TEXT"
    :password "TEXT"
@@ -26,35 +27,36 @@
    :symbol   "TEXT"
    :uuid     "UUID"})
 
-(defn attr->table-names [{::keys [tables]}] tables)
+(defn attr->table-names [{::keys [tables]}]
+  tables)
 
 (defn attr->column-name [{::attr/keys [qualified-key]
                           ::keys      [column-name]}]
   (or
     column-name
-    (some-> qualified-key
-      name
-      csk/->snake_case)))
+    (some-> qualified-key name csk/->snake_case)))
 
 (defn attr->sql [schema-name {::attr/keys [type identity?]
                               ::keys      [schema]
                               :as         attr}]
-  (when-let [correct-schema? (= schema schema-name)]
+  (when (= schema schema-name)
     (enc/if-let [tables (seq (attr->table-names attr))
                  col    (attr->column-name attr)
                  typ    (get type-map type)]
       (str/join "\n"
-        (map (fn [table]
-               (let [index-name (str table "_" col "_idx")]
-                 (str
-                   (format "CREATE TABLE IF NOT EXISTS %s ();\n" table)
-                   (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table col typ)
-                   (when identity?
-                     (format "CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s(%s);\n" index-name table col)))))
-          tables))
+        (for [table tables]
+          (let [index-name (str table "_" col "_idx")]
+            (str
+              (format "CREATE TABLE IF NOT EXISTS %s ();\n" table)
+              (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n"
+                table col typ)
+              (when identity?
+                (format "CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s(%s);\n"
+                  index-name table col))))))
       (log/error "Correct schema for attribute, but generation failed: "
         (::attr/qualified-key attr)
-        (when (nil? (get type-map type)) (str " (No mapping for type " type ")"))))))
+        (when (nil? (get type-map type))
+          (str " (No mapping for type " type ")"))))))
 
 (defn automatic-schema
   "Returns SQL schema for all attributes that support it."
@@ -109,22 +111,23 @@
           (log/error (str "No pool for " dbkey ". Skipping migrations.")))))))
 
 (defn create-connection-pools! [config all-attributes]
-  (let [result (enc/if-let [databases (get config ::databases)
-                            pools     (reduce (fn [pools [dbkey dbconfig]]
-                                                (log/info (str "Creating connection pool for " dbkey))
-                                                (assoc pools dbkey (create-pool (:hikaricp/config dbconfig)))) {} databases)]
-                 (do
-                   (try
-                     (migrate! config all-attributes pools)
-                     (catch Throwable t
-                       (log/error "DATABASE STARTUP FAILED: " t)
-                       (stop-connection-pools! pools)
-                       (throw t)))
-                   pools)
-                 (do
-                   (log/error "SQL Database configuration missing/incorrect.")
-                   (throw (ex-info "SQL Configuration failed." {}))))]
-    result))
+  (enc/if-let [databases (get config ::databases)
+               pools (reduce
+                       (fn [pools [dbkey dbconfig]]
+                         (log/info (str "Creating connection pool for " dbkey))
+                         (assoc pools
+                           dbkey (create-pool (:hikaricp/config dbconfig))))
+                       {} databases)]
+    (try
+      (migrate! config all-attributes pools)
+      pools
+      (catch Throwable t
+        (log/error "DATABASE STARTUP FAILED: " t)
+        (stop-connection-pools! pools)
+        (throw t)))
+    (do
+      (log/error "SQL Database configuration missing/incorrect.")
+      (throw (ex-info "SQL Configuration failed." {})))))
 
 (defn id->query-value [id-attr v]
   (let [t (::attr/type id-attr)]
@@ -133,12 +136,17 @@
       v)))
 
 (defn column-names [attributes query]
-  (let [desired-keys       (->> query eql/query->ast :children (map :dispatch-key) set)
-        desired-attributes (filterv #(contains? desired-keys (::attr/qualified-key %)) attributes)]
+  (let [desired-keys       (->> query
+                             (eql/query->ast)
+                             (:children)
+                             (map :dispatch-key)
+                             (set))
+        desired-attributes (filterv
+                             #(contains? desired-keys (::attr/qualified-key %))
+                             attributes)]
     (mapv attr->column-name desired-attributes)))
 
-(defn entity-query
-  [{::keys [schema attributes id-attribute] :as env} input]
+(defn entity-query [{::keys [schema attributes id-attribute] :as env} input]
   (let [one? (not (sequential? input))]
     (enc/if-let [db               (get-in env [::databases schema])
                  id-key           (::attr/qualified-key id-attribute)
@@ -153,10 +161,13 @@
                                                       (get id-key)
                                                       to-v) input)))
                  column-name->key (into {}
-                                    (map (fn [attr]
-                                           [(attr->column-name attr) (::attr/qualified-key attr)]) attributes))
+                                    (for [attr attributes]
+                                      [(attr->column-name attr)
+                                       (::attr/qualified-key attr)]))
                  sql              (str
-                                    "SELECT " (str/join ", " (column-names attributes query)) " FROM " table
+                                    "SELECT " (str/join ", "
+                                                (column-names attributes query))
+                                    " FROM " table
                                     " WHERE " (attr->column-name id-attribute)
                                     " IN (" (str/join "," ids) ")")]
       (do
@@ -167,11 +178,10 @@
           (if one?
             (first result)
             result)))
-      (do
-        (log/info "Unable to complete query.")
-        nil))))
+      (log/info "Unable to complete query."))))
 
-;; TODO: This is nearly identical to the Datomic one...helper function would be nice
+;; TODO: This is nearly identical to the Datomic one...helper function
+;; would be nice
 (defn id-resolver [id-attr attributes]
   (enc/if-let [id-key        (::attr/qualified-key id-attr)
                outputs       (attr/attributes->eql attributes)
@@ -192,13 +202,13 @@
                                       input)
                                     (auth/redact env)))
      ::pc/input   #{id-key}}
-    (do
-      (log/error "Unable to generate id-resolver. "
-        "Attribute was missing schema, or could not be found in the attribute registry: " id-attr)
-      nil)))
+    (log/error
+      "Unable to generate id-resolver. Attribute was missing schema, or "
+      "could not be found in the attribute registry: " id-attr)))
 
 (defn generate-resolvers
-  "Returns a sequence of resolvers that can resolve attributes from SQL databases."
+  "Returns a sequence of resolvers that can resolve attributes from
+  SQL databases."
   [attributes schema]
   (let [attributes          (filter #(= schema (::schema %)) attributes)
         table->id-attribute (reduce
@@ -210,17 +220,15 @@
                                     m
                                     tables)
                                   m))
-                              {}
-                              attributes)
-        id-attr->attributes (group-by ::k (mapcat (fn [attribute]
-                                                    (map
-                                                      (fn [table]
-                                                        (let [id-attr (table->id-attribute table)]
-                                                          (assoc attribute ::k id-attr)))
-                                                      (get attribute ::tables)))
-                                            attributes))
-        entity-resolvers    (reduce-kv
-                              (fn [result id-attr attributes] (conj result (id-resolver id-attr attributes)))
-                              []
-                              id-attr->attributes)]
-    entity-resolvers))
+                              {} attributes)
+        id-attr->attributes (->> attributes
+                              (mapcat
+                                (fn [attribute]
+                                  (for [table (get attribute ::tables)
+                                        :let [id-attr (table->id-attribute table)]]
+                                    (assoc attribute ::k id-attr))))
+                              (group-by ::k))]
+    (reduce-kv
+      (fn [resolvers id-attr attributes]
+        (conj resolvers (id-resolver id-attr attributes)))
+      [] id-attr->attributes)))
