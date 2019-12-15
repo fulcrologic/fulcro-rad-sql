@@ -238,14 +238,20 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Pathom mutations
 
-(defn save-form-steps
+(defn- attr-table [attr-key]
+  (first (::tables (attr/key->attribute attr-key))))
+
+(defn delta->txs
   "Given a save form delta, returns the list describing the steps
   needed to be done to persist the form."
   [form-delta]
   (for [[[id-k id] entity-diff] form-delta
         :let [attr (attr/key->attribute id-k)
-              table (first (::tables attr))]
-        :when table]
+              table (attr-table id-k)
+              persistent-attrs (filter
+                                 #(= table (attr-table %))
+                                 (keys entity-diff))]
+        :when (and table (seq persistent-attrs))]
     {::table    table
      ::schema   (::schema attr)
      :tx/action :sql/update
@@ -258,7 +264,7 @@
   [env {::form/keys [delta]}]
   (doseq [{:tx/keys [attrs where]
            ::keys [schema table]
-           :as tx} (save-form-steps delta)]
+           :as tx} (delta->txs delta)]
     (if-let [db (get-in env [::databases schema])]
       (jdbc.sql/update! (:datasource db) table attrs where)
       (throw (ex-info "No connection found for SQL transaction"
