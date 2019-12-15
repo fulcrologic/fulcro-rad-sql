@@ -145,8 +145,6 @@ the desired connection that the resolver should use. The generated resolvers
 use https://github.com/clojure/java.jdbc[Clojure JDBC], so the values
 in this map should be db-specs compatible with that.
 
-NOTE: Should we port up to the newer next.jdbc lib?
-
 NOTE: The parser construction should allow wrapping the call to the parser so you can start a transaction.
 This will be fixed in the near future.
 

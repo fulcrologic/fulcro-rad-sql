@@ -1,8 +1,8 @@
 (ns com.fulcrologic.rad.database-adapters.sql
   (:require
     [camel-snake-kebab.core :as csk]
-    [clojure.java.jdbc :as jdbc]
     [next.jdbc.sql :as jdbc.sql]
+    [next.jdbc :as jdbc]
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [com.wsscode.pathom.connect :as pc]
@@ -109,7 +109,7 @@
             auto-create-missing?
             (do
               (log/info "Automatically trying to create SQL schema from attributes.")
-              (jdbc/execute! db (automatic-schema schema all-attributes))))
+              (jdbc/execute! (:datasource db) (automatic-schema schema all-attributes))))
           (log/error (str "No pool for " dbkey ". Skipping migrations.")))))))
 
 (defn create-connection-pools! [config all-attributes]
@@ -162,10 +162,6 @@
                                     (into [] (keep #(some-> %
                                                       (get id-key)
                                                       to-v) input)))
-                 column-name->key (into {}
-                                    (for [attr attributes]
-                                      [(attr->column-name attr)
-                                       (::attr/qualified-key attr)]))
                  sql              (str
                                     "SELECT " (str/join ", "
                                                 (column-names attributes query))
@@ -174,9 +170,7 @@
                                     " IN (" (str/join "," ids) ")")]
       (do
         (log/info "Running" sql "on entities with " id-key ":" ids)
-        (let [result (jdbc/query db [sql]
-                       {:keywordize  false
-                        :identifiers column-name->key})]
+        (let [result (jdbc.sql/query (:datasource db) [sql])]
           (if one?
             (first result)
             result)))

@@ -97,14 +97,14 @@
       <version>2.115.0</version>
     </dependency>
     <dependency>
+      <groupId>seancorfield</groupId>
+      <artifactId>next.jdbc</artifactId>
+      <version>1.0.12</version>
+    </dependency>
+    <dependency>
       <groupId>com.taoensso</groupId>
       <artifactId>timbre</artifactId>
       <version>4.10.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.clojure</groupId>
-      <artifactId>java.jdbc</artifactId>
-      <version>0.7.10</version>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
