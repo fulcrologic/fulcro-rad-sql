@@ -7,6 +7,7 @@
            com.fulcrologic/guardrails {:mvn/version "0.0.9"}
            com.fulcrologic/fulcro-rad {:mvn/version "0.0.1-SNAPSHOT" :scope "provided"}
            org.clojure/java.jdbc      {:mvn/version "0.7.10"}
+           seancorfield/next.jdbc     {:mvn/version "1.0.12"}
            com.zaxxer/HikariCP        {:mvn/version "3.4.1"}
            org.flywaydb/flyway-core   {:mvn/version "4.2.0"}
            com.wsscode/pathom         {:mvn/version "2.2.26"}

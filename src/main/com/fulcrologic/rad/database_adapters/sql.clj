@@ -2,6 +2,7 @@
   (:require
     [camel-snake-kebab.core :as csk]
     [clojure.java.jdbc :as jdbc]
+    [next.jdbc.sql :as jdbc.sql]
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [com.wsscode.pathom.connect :as pc]
@@ -10,6 +11,7 @@
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.authorization :as auth]
+    [com.fulcrologic.rad.form :as rad.form]
     [edn-query-language.core :as eql])
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariConfig HikariDataSource)
@@ -232,3 +234,33 @@
       (fn [resolvers id-attr attributes]
         (conj resolvers (id-resolver id-attr attributes)))
       [] id-attr->attributes)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Pathom mutations
+
+(defn save-form-steps
+  "Given a save form delta, returns the list describing the steps
+  needed to be done to persist the form."
+  [form-delta]
+  (for [[[id-k id] entity-diff] form-delta
+        :let [attr (attr/key->attribute id-k)
+              table (first (::tables attr))]
+        :when table]
+    {::table    table
+     ::schema   (::schema attr)
+     :tx/action :sql/update
+     :tx/attrs  (enc/map-vals :after entity-diff)
+     :tx/where  {id-k id}}))
+
+(defn save-form!
+  "Does all the necessary operations to persist mutations from the
+  form delta into the appropriate tables in the appropriate databases"
+  [env {::form/keys [delta]}]
+  (doseq [{:tx/keys [attrs where]
+           ::keys [schema table]
+           :as tx} (save-form-steps delta)]
+    (if-let [db (get-in env [::databases schema])]
+      (jdbc.sql/update! (:datasource db) table attrs where)
+      (throw (ex-info "No connection found for SQL transaction"
+               {:type ::missing-connection
+                :tx tx})))))
