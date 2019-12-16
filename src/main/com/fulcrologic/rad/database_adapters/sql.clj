@@ -8,6 +8,7 @@
     [com.wsscode.pathom.connect :as pc]
     [com.fulcrologic.guardrails.core :refer [>defn =>]]
     [com.fulcrologic.rad.attributes :as attr]
+    [com.fulcrologic.rad.database-adapters.sql.result-set :as rad.sql.rs]
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.authorization :as auth]
@@ -31,6 +32,12 @@
 
 (defn attr->table-names [{::keys [tables]}]
   tables)
+
+(defn- attr->table-name
+  "Helpful but temporary, until we cleanup up the multi db / table
+  story"
+  [{::keys [tables]}]
+  (first tables))
 
 (defn attr->column-name [{::attr/keys [qualified-key]
                           ::keys      [column-name]}]
@@ -152,7 +159,7 @@
   (let [one? (not (sequential? input))]
     (enc/if-let [db               (get-in env [::databases schema])
                  id-key           (::attr/qualified-key id-attribute)
-                 table            (-> id-attribute ::tables first)
+                 table            (attr->table-name id-attribute)
                  query            (or
                                     (get env :com.wsscode.pathom.core/parent-query)
                                     (get env ::default-query))
@@ -162,6 +169,10 @@
                                     (into [] (keep #(some-> %
                                                       (get id-key)
                                                       to-v) input)))
+                 sql-col->key   (into {}
+                                  (for [attr attributes]
+                                    [[(attr->table-name attr) (attr->column-name attr)]
+                                     (::attr/qualified-key attr)]))
                  sql              (str
                                     "SELECT " (str/join ", "
                                                 (column-names attributes query))
@@ -170,7 +181,10 @@
                                     " IN (" (str/join "," ids) ")")]
       (do
         (log/info "Running" sql "on entities with " id-key ":" ids)
-        (let [result (jdbc.sql/query (:datasource db) [sql])]
+        (let [result (jdbc.sql/query (:datasource db) [sql]
+                       {:builder-fn rad.sql.rs/as-qualified-maps
+                        :key-fn (fn [table column]
+                                  (sql-col->key [table column]))})]
           (if one?
             (first result)
             result)))
@@ -255,7 +269,7 @@
 (defn save-form!
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"
-  [env {::form/keys [delta]}]
+  [env {::rad.form/keys [delta]}]
   (doseq [{:tx/keys [attrs where]
            ::keys [schema table]
            :as tx} (delta->txs delta)]
