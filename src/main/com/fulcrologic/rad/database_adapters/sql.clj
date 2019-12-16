@@ -1,8 +1,9 @@
 (ns com.fulcrologic.rad.database-adapters.sql
   (:require
     [camel-snake-kebab.core :as csk]
-    [next.jdbc.sql :as jdbc.sql]
     [next.jdbc :as jdbc]
+    [next.jdbc.sql :as jdbc.sql]
+    [next.jdbc.sql.builder :as jdbc.builder]
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [com.wsscode.pathom.connect :as pc]
@@ -170,6 +171,14 @@
                         (get idx [table column]
                           (keyword table column))))}
       opts)))
+
+(defn where-attributes
+  "Generates a query using next.jdbc's builders, and executes it. Any
+  columns in the result set will be efficiently namespaced according
+  to the attributes in `::rad/attributes` option."
+  [db table where opts]
+  (let [where-clause (enc/map-keys attr->column-name where)]
+    (query db (jdbc.builder/for-query table where-clause opts) opts)))
 
 (defn id->query-value [id-attr v]
   (let [t (::attr/type id-attr)]
