@@ -13,7 +13,8 @@
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.authorization :as auth]
     [com.fulcrologic.rad.form :as rad.form]
-    [edn-query-language.core :as eql])
+    [edn-query-language.core :as eql]
+    [com.fulcrologic.rad :as rad])
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.util Properties)))
@@ -67,6 +68,9 @@
         (when (nil? (get type-map type))
           (str " (No mapping for type " type ")"))))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Migrations
+
 (defn automatic-schema
   "Returns SQL schema for all attributes that support it."
   [schema-name attributes]
@@ -119,6 +123,9 @@
               (jdbc/execute! (:datasource db) (automatic-schema schema all-attributes))))
           (log/error (str "No pool for " dbkey ". Skipping migrations.")))))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Connection Pool
+
 (defn create-connection-pools! [config all-attributes]
   (enc/if-let [databases (get config ::databases)
                pools (reduce
@@ -137,6 +144,32 @@
     (do
       (log/error "SQL Database configuration missing/incorrect.")
       (throw (ex-info "SQL Configuration failed." {})))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; RAD Queries
+
+(defn attrs->sql-col-index
+  "Takes a list of rad attributes and returns an index of the form
+  `{[table column] :qualified/keyword}`"
+  [attributes]
+  (into {}
+    (for [attr attributes]
+      [[(attr->table-name attr) (attr->column-name attr)]
+       (::attr/qualified-key attr)])))
+
+(defn query
+  "Wraps next.jbdc's query, but will return fully qualified keywords
+  for any matching attributes found in `::rad/attributes` in the
+  options map."
+  [db stmt opts]
+  (jdbc.sql/query (:datasource db)
+    stmt
+    (merge {:builder-fn rad.sql.rs/as-qualified-maps
+            :key-fn (let [idx (attrs->sql-col-index (::rad/attributes opts))]
+                      (fn [table column]
+                        (get idx [table column]
+                          (keyword table column))))}
+      opts)))
 
 (defn id->query-value [id-attr v]
   (let [t (::attr/type id-attr)]
@@ -160,7 +193,7 @@
     (enc/if-let [db               (get-in env [::databases schema])
                  id-key           (::attr/qualified-key id-attribute)
                  table            (attr->table-name id-attribute)
-                 query            (or
+                 query*           (or
                                     (get env :com.wsscode.pathom.core/parent-query)
                                     (get env ::default-query))
                  to-v             (partial id->query-value id-attribute)
@@ -169,22 +202,15 @@
                                     (into [] (keep #(some-> %
                                                       (get id-key)
                                                       to-v) input)))
-                 sql-col->key   (into {}
-                                  (for [attr attributes]
-                                    [[(attr->table-name attr) (attr->column-name attr)]
-                                     (::attr/qualified-key attr)]))
                  sql              (str
                                     "SELECT " (str/join ", "
-                                                (column-names attributes query))
+                                                (column-names attributes query*))
                                     " FROM " table
                                     " WHERE " (attr->column-name id-attribute)
                                     " IN (" (str/join "," ids) ")")]
       (do
         (log/info "Running" sql "on entities with " id-key ":" ids)
-        (let [result (jdbc.sql/query (:datasource db) [sql]
-                       {:builder-fn rad.sql.rs/as-qualified-maps
-                        :key-fn (fn [table column]
-                                  (sql-col->key [table column]))})]
+        (let [result (query db [sql] {::rad/attributes attributes})]
           (if one?
             (first result)
             result)))
