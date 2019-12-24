@@ -292,8 +292,11 @@
         :let [attr (attr/key->attribute id-k)
               table (attr-table id-k)
               persistent-attrs (filter
-                                 #(= table (attr-table %))
-                                 (keys entity-diff))]
+                                 (fn [[k v]]
+                                   (and
+                                     (= table (attr-table k))
+                                     (not= (:before v) (:after v))))
+                                 entity-diff)]
         :when (and table (seq persistent-attrs))]
     {::table    table
      ::schema   (::schema attr)
