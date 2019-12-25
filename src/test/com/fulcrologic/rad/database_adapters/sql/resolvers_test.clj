@@ -1,37 +1,19 @@
-(ns com.fulcrologic.rad.database-adapters.sql-test
+(ns com.fulcrologic.rad.database-adapters.sql.resolvers-test
   (:require
-    [com.fulcrologic.rad.attributes            :as rad.attr :refer [defattr]]
-    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
-    [fulcro-spec.core :refer [specification component when-mocking assertions]]))
+    [com.fulcrologic.rad.attributes                                :as rad.attr]
+    [com.fulcrologic.rad.database-adapters.sql                     :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql.resolvers           :as sql.resolvers]
+    [com.fulcrologic.rad.database-adapters.test-helpers.attributes :as attrs]
+    [fulcro-spec.core :refer [specification component assertions when-mocking ]]))
 
-(defattr account-id :account/id :uuid
-  {::rad.attr/identity? true
-   ::rad.sql/schema :production
-   ::rad.sql/tables #{"accounts"}})
-
-(defattr account-name :account/name :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"accounts"}})
-
-;; Derived data
-(defattr account-locked? :account/locked? :boolean
-  {})
-
-(defattr user-id :user/id :uuid
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"users"}})
-
-(defattr user-name :user/name :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"users"}})
 
 (specification "delta->txs"
   (when-mocking
-    (rad.attr/key->attribute k) => (get {:account/id      account-id
-                                         :account/name    account-name
-                                         :account/locked? account-locked?
-                                         :user/id         user-id
-                                         :user/name       user-name}
+    (rad.attr/key->attribute k) => (get {:account/id      attrs/account-id
+                                         :account/name    attrs/account-name
+                                         :account/locked? attrs/account-locked?
+                                         :user/id         attrs/user-id
+                                         :user/name       attrs/user-name}
                                      k)
 
     (let [account-id #uuid "ffffffff-ffff-ffff-ffff-000000000001"
@@ -53,16 +35,16 @@
       (component "Single level delta"
         (assertions
           "returns a single transaction"
-          (count (rad.sql/delta->txs account-delta)) => 1
+          (count (sql.resolvers/delta->txs account-delta)) => 1
 
           "skips attributes that don't need persisting"
-          (rad.sql/delta->txs account-delta-nosql) => []
+          (sql.resolvers/delta->txs account-delta-nosql) => []
 
           "skips values that didn't change"
-          (rad.sql/delta->txs account-delta-unchanged) => []))
+          (sql.resolvers/delta->txs account-delta-unchanged) => []))
 
       (component "Multi top level delta"
-        (let [txs (rad.sql/delta->txs multi-idents-delta)]
+        (let [txs (sql.resolvers/delta->txs multi-idents-delta)]
           (assertions
             "returns multiple statements"
             (count txs) => 2
