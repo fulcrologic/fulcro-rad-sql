@@ -1,14 +1,11 @@
 (ns com.fulcrologic.rad.database-adapters.sql.connection
   (:require
     [com.fulcrologic.rad.database-adapters.sql.migration :as sql.migration]
-    [com.fulcrologic.rad.database-adapters.sql.utils     :as u]
+    [com.fulcrologic.rad.database-adapters.sql           :as rad.sql]
     [taoensso.encore                                     :as enc]
     [taoensso.timbre                                     :as log])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.util Properties)))
-
-
-(u/alias! 'rad.sql 'com.fulcrologic.rad.database-adapters.sql)
 
 
 (defn- create-pool

@@ -10,15 +10,13 @@
     [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
     [com.fulcrologic.rad.database-adapters.sql.utils      :as u]
     [com.fulcrologic.rad                                  :as rad]
+    [com.fulcrologic.rad.database-adapters.sql            :as rad.sql]
     [clojure.string                                       :as str]
     [edn-query-language.core                              :as eql]
     [next.jdbc.sql                                        :as jdbc.sql]
     [next.jdbc.sql.builder                                :as jdbc.builder]
     [taoensso.encore                                      :as enc]
     [taoensso.timbre                                      :as log]))
-
-(u/alias! 'rad.sql
-  'com.fulcrologic.rad.database-adapters.sql)
 
 
 (defn- attrs->sql-col-index

@@ -5,13 +5,11 @@
     [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
     [com.fulcrologic.rad.authorization               :as auth]
     [com.fulcrologic.rad.form                        :as rad.form]
+    [com.fulcrologic.rad.database-adapters.sql       :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.utils :as u]
     [taoensso.encore                                 :as enc]
     [taoensso.timbre                                 :as log]
     [next.jdbc.sql                                   :as jdbc.sql]))
-
-(u/alias! 'rad.sql
-  'com.fulcrologic.rad.database-adapters.sql)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -106,7 +104,7 @@
   (doseq [{:tx/keys [attrs where]
            ::rad.sql/keys [schema table]
            :as tx} (delta->txs delta)]
-    (if-let [db (get-in env [::databases schema])]
+    (if-let [db (get-in env [::rad.sql/databases schema])]
       (jdbc.sql/update! (:datasource db) table attrs where)
       (throw (ex-info "No connection found for SQL transaction"
                {:type ::rad.sql/missing-connection

@@ -5,12 +5,10 @@
     [com.fulcrologic.rad.attributes                  :as attr]
     [taoensso.encore                                 :as enc]
     [taoensso.timbre                                 :as log]
+    [com.fulcrologic.rad.database-adapters.sql       :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.utils :as u])
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariDataSource)))
-
-(u/alias! 'rad.sql
-  'com.fulcrologic.rad.database-adapters.sql)
 
 
 (def type-map
