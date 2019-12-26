@@ -1,15 +1,15 @@
 (ns com.fulcrologic.rad.database-adapters.sql.resolvers
   (:require
-    [com.wsscode.pathom.connect                      :as pc]
-    [com.fulcrologic.rad.attributes                  :as attr]
-    [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
-    [com.fulcrologic.rad.authorization               :as auth]
-    [com.fulcrologic.rad.form                        :as rad.form]
-    [com.fulcrologic.rad.database-adapters.sql       :as rad.sql]
-    [com.fulcrologic.rad.database-adapters.sql.utils :as u]
-    [taoensso.encore                                 :as enc]
-    [taoensso.timbre                                 :as log]
-    [next.jdbc.sql                                   :as jdbc.sql]))
+    [com.fulcrologic.rad.attributes                   :as attr]
+    [com.fulcrologic.rad.authorization                :as auth]
+    [com.fulcrologic.rad.form                         :as rad.form]
+    [com.fulcrologic.rad.database-adapters.sql        :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql.query  :as sql.query]
+    [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
+    [com.wsscode.pathom.connect                       :as pc]
+    [taoensso.encore                                  :as enc]
+    [taoensso.timbre                                  :as log]
+    [next.jdbc.sql                                    :as jdbc.sql]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -38,7 +38,7 @@
                                     (auth/redact env)))
      ::pc/input   #{id-key}}
     (log/error
-      "Unable to generate id-resolver. Attribute was missing schema, or "
+      "Unable to generate id-resolver. Attribute was missing schema, or"
       "could not be found in the attribute registry: " id-attr)))
 
 
@@ -73,7 +73,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Writes
 
-(def attr-table (comp #'u/attr->table-name #'attr/key->attribute))
+(def attr-table (comp #'sql.schema/attr->table-name #'attr/key->attribute))
 
 
 (defn delta->txs
@@ -82,7 +82,7 @@
   [form-delta]
   (for [[[id-k id] entity-diff] form-delta
         :let [attr (attr/key->attribute id-k)
-              table (u/attr->table-name attr)
+              table (sql.schema/attr->table-name attr)
               persistent-attrs (filter
                                  (fn [[k v]]
                                    (and

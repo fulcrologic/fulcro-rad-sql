@@ -1,12 +1,12 @@
 (ns com.fulcrologic.rad.database-adapters.sql.migration
   (:require
-    [next.jdbc                                       :as jdbc]
-    [clojure.string                                  :as str]
-    [com.fulcrologic.rad.attributes                  :as attr]
-    [taoensso.encore                                 :as enc]
-    [taoensso.timbre                                 :as log]
-    [com.fulcrologic.rad.database-adapters.sql       :as rad.sql]
-    [com.fulcrologic.rad.database-adapters.sql.utils :as u])
+    [next.jdbc                                        :as jdbc]
+    [clojure.string                                   :as str]
+    [com.fulcrologic.rad.attributes                   :as attr]
+    [taoensso.encore                                  :as enc]
+    [taoensso.timbre                                  :as log]
+    [com.fulcrologic.rad.database-adapters.sql        :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema])
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariDataSource)))
 
@@ -28,8 +28,8 @@
                               ::rad.sql/keys      [schema]
                               :as         attr}]
   (when (= schema schema-name)
-    (enc/if-let [tables (seq (u/attr->table-names attr))
-                 col    (u/attr->column-name attr)
+    (enc/if-let [tables (seq (sql.schema/attr->table-names attr))
+                 col    (sql.schema/attr->column-name attr)
                  typ    (get type-map type)]
       (str/join "\n"
         (for [table tables]

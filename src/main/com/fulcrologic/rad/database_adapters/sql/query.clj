@@ -6,27 +6,17 @@
   - Building custom queries based of off RAD attributes
   - Persisting data based off submitted form deltas"
   (:require
-    [com.fulcrologic.rad.attributes                       :as attr]
-    [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
-    [com.fulcrologic.rad.database-adapters.sql.utils      :as u]
     [com.fulcrologic.rad                                  :as rad]
+    [com.fulcrologic.rad.attributes                       :as attr]
     [com.fulcrologic.rad.database-adapters.sql            :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
+    [com.fulcrologic.rad.database-adapters.sql.schema     :as sql.schema]
     [clojure.string                                       :as str]
     [edn-query-language.core                              :as eql]
     [next.jdbc.sql                                        :as jdbc.sql]
     [next.jdbc.sql.builder                                :as jdbc.builder]
     [taoensso.encore                                      :as enc]
     [taoensso.timbre                                      :as log]))
-
-
-(defn- attrs->sql-col-index
-  "Takes a list of rad attributes and returns an index of the form
-  `{[table column] :qualified/keyword}`"
-  [attributes]
-  (into {}
-    (for [attr attributes]
-      [[(u/attr->table-name attr) (u/attr->column-name attr)]
-       (::attr/qualified-key attr)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,7 +30,7 @@
   (jdbc.sql/query (:datasource db)
     stmt
     (merge {:builder-fn sql.rs/as-qualified-maps
-            :key-fn (let [idx (attrs->sql-col-index (::rad/attributes opts))]
+            :key-fn (let [idx (sql.schema/attrs->sql-col-index (::rad/attributes opts))]
                       (fn [table column]
                         (get idx [table column]
                           (keyword table column))))}
@@ -52,7 +42,7 @@
   columns in the result set will be efficiently namespaced according
   to the attributes in `::rad/attributes` option."
   [db table where opts]
-  (let [where-clause (enc/map-keys u/attr->column-name where)]
+  (let [where-clause (enc/map-keys sql.schema/attr->column-name where)]
     (query db (jdbc.builder/for-query table where-clause opts) opts)))
 
 
@@ -75,14 +65,14 @@
         desired-attributes (filterv
                              #(contains? desired-keys (::attr/qualified-key %))
                              attributes)]
-    (mapv u/attr->column-name desired-attributes)))
+    (mapv sql.schema/attr->column-name desired-attributes)))
 
 
 (defn entity-query [{::rad.sql/keys [schema attributes id-attribute] :as env} input]
   (let [one? (not (sequential? input))]
     (enc/if-let [db               (get-in env [::rad.sql/databases schema])
                  id-key           (::attr/qualified-key id-attribute)
-                 table            (u/attr->table-name id-attribute)
+                 table            (sql.schema/attr->table-name id-attribute)
                  query*           (or
                                     (get env :com.wsscode.pathom.core/parent-query)
                                     (get env ::rad.sql/default-query))
@@ -96,7 +86,7 @@
                                     "SELECT " (str/join ", "
                                                 (column-names attributes query*))
                                     " FROM " table
-                                    " WHERE " (u/attr->column-name id-attribute)
+                                    " WHERE " (sql.schema/attr->column-name id-attribute)
                                     " IN (" (str/join "," ids) ")")]
       (do
         (log/info "Running" sql "on entities with " id-key ":" ids)

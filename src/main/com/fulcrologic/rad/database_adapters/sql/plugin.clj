@@ -1,13 +1,13 @@
 (ns com.fulcrologic.rad.database-adapters.sql.plugin
   (:require
-    [com.fulcrologic.rad.database-adapters.sql.connection :as sql.conn]
+    [com.fulcrologic.rad.database-adapters.sql.connection :as sql.connection]
     [com.fulcrologic.rad.database-adapters.sql.migration  :as sql.migration]
     [com.fulcrologic.rad.database-adapters.sql.query      :as sql.query]
     [com.fulcrologic.rad.database-adapters.sql.resolvers  :as sql.resolvers]))
 
 ;; Connection
-(def stop-connection-pools!   #'sql.conn/stop-connection-pools!)
-(def create-connection-pools! #'sql.conn/create-connection-pools!)
+(def stop-connection-pools!   #'sql.connection/stop-connection-pools!)
+(def create-connection-pools! #'sql.connection/create-connection-pools!)
 (def migrate!                 #'sql.migration/migrate!)
 
 ;; Queries and Resolvers
