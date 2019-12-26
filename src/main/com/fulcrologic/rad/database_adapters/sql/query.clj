@@ -50,8 +50,11 @@
 ;; Entity query
 
 
-(defn query->plan [query {:keys [::rad/attributes
-                                 ::id-attribute]}]
+(defn query->plan
+  "Given an EQL query, plans a sql query that would fetch the entities
+  and their joins"
+  [query {:keys [::rad/attributes
+                 ::id-attribute]}]
   (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
         table               (sql.schema/attr->table-name id-attribute)
         k->attr             (enc/keys-by ::attr/qualified-key attributes)
@@ -67,6 +70,21 @@
      ::joins (for [node join]
                [[(node->table node) (node->column node)]
                 [table (sql.schema/attr->column-name id-attribute)]])}))
+
+
+(defn plan->sql
+  "Given a query plan, return the sql statement that matches the plan"
+  [{::keys [fields from joins]}]
+  (str "SELECT " (str/join ", " (for [[table cols] fields
+                                      col cols]
+                                  (str table ".\"" col \" " AS " table "_" col)))
+    " FROM " from
+    (when (seq joins)
+      (str/join ", "
+        (for [[[ltable lcolumn] [rtable rcolumn]] joins]
+          (str " LEFT JOIN " ltable " ON "
+            ltable ".\"" lcolumn "\" = "
+            rtable ".\"" rcolumn \"))))))
 
 
 (defn- id->query-value [id-attr v]
