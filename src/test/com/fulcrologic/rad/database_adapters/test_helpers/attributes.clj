@@ -25,11 +25,11 @@
 
 
 (defattr account-addresses :account/addresses :ref
-  {::attr/target         :com.example.model.address/id
-   ::attr/cardinality    :many
-   ::rad.sql/schema      :production
-   ::rad.sql/tables      #{"addresses"}
-   ::rad.sql/column-name "address_id"})
+  {::rad.attr/target      :com.example.model.address/id
+   ::rad.attr/cardinality :many
+   ::rad.sql/schema       :production
+   ::rad.sql/tables       #{"addresses"}
+   ::rad.sql/column-name  "account_id"})
 
 
 ;; Derived data
@@ -38,7 +38,7 @@
 
 
 (def account-attributes
-  [account-id account-name account-active? account-locked?])
+  [account-id account-name account-active? account-locked? account-addresses])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -58,5 +58,40 @@
 (def user-attributes [user-id user-name])
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Address
+
+(defattr addr-id :address/id :uuid
+  {::rad.attr/identity? true
+   ::rad.sql/schema     :production
+   ::rad.sql/tables     #{"addresses"}})
+
+
+(defattr addr-street :address/street :string
+  {::rad.sql/schema :production
+   ::rad.sql/tables #{"addresses"}})
+
+
+(defattr addr-city :address/city :string
+  {::rad.sql/schema :production
+   ::rad.sql/tables #{"addresses"}})
+
+
+(def states #:state {:AZ "Arizona" :KS "Kansas" :MS "Mississippi"})
+
+(defattr addr-state :address/state :enum
+  {::rad.attr/enumerated-values (set (keys states))
+   ::rad.attr/labels            states
+   ::rad.sql/schema             :production
+   ::rad.sql/tables             #{"addresses"}})
+
+
+(defattr addr-zip ::zip :string
+  {::rad.sql/schema :production
+   ::rad.sql/tables #{"addresses"}})
+
+
+(def address-attributes [addr-id addr-street addr-city addr-state addr-zip])
+
 (def all-attributes
-  (concat account-attributes user-attributes))
+  (concat account-attributes user-attributes address-attributes))

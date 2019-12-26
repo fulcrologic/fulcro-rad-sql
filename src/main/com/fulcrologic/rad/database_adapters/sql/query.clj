@@ -49,6 +49,26 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Entity query
 
+
+(defn query->plan [query {:keys [::rad/attributes
+                                 ::id-attribute]}]
+  (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
+        table               (sql.schema/attr->table-name id-attribute)
+        k->attr             (enc/keys-by ::attr/qualified-key attributes)
+        k->column           (comp sql.schema/attr->column-name k->attr)
+        node->column        (comp k->column :dispatch-key)
+        node->table         (comp sql.schema/attr->table-name k->attr :dispatch-key)]
+    {::fields (concat
+                [[table (keep node->column prop)]]
+                (for [node join]
+                  [(node->table node)
+                   (keep (comp k->column :dispatch-key) (:children node))]))
+     ::from table
+     ::joins (for [node join]
+               [[(node->table node) (node->column node)]
+                [table (sql.schema/attr->column-name id-attribute)]])}))
+
+
 (defn- id->query-value [id-attr v]
   (let [t (::attr/type id-attr)]
     (case t
