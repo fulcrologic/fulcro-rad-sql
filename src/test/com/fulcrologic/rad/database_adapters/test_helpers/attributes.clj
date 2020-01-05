@@ -18,6 +18,11 @@
    ::rad.sql/tables #{"accounts"}})
 
 
+(defattr account-email :account/email :string
+  {::rad.sql/schema :production
+   ::rad.sql/tables #{"accounts"}})
+
+
 (defattr account-active? :account/active? :boolean
   {::rad.sql/schema :production
    ::rad.sql/tables #{"accounts"}
@@ -25,7 +30,7 @@
 
 
 (defattr account-addresses :account/addresses :ref
-  {::rad.attr/target      :com.example.model.address/id
+  {::rad.attr/target      :address/id
    ::rad.attr/cardinality :many
    ::rad.sql/schema       :production
    ::rad.sql/tables       #{"addresses"}
@@ -38,7 +43,7 @@
 
 
 (def account-attributes
-  [account-id account-name account-active? account-locked? account-addresses])
+  [account-id account-name account-email account-active? account-locked? account-addresses])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -86,7 +91,7 @@
    ::rad.sql/tables             #{"addresses"}})
 
 
-(defattr addr-zip ::zip :string
+(defattr addr-zip :address/zip :string
   {::rad.sql/schema :production
    ::rad.sql/tables #{"addresses"}})
 
