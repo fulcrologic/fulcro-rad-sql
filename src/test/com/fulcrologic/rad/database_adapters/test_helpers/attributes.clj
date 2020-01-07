@@ -34,7 +34,8 @@
    ::rad.attr/target      :address/id
    ::rad.sql/schema       :production
    ::rad.sql/entity-ids   #{:account/id} ;; Should always be one.
-   ::rad.sql/join         ["addresses" "account_id"]})
+   ::rad.sql/join         ["addresses" "account_id"]
+   })
 
 
 ;; Derived data

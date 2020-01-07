@@ -6,7 +6,6 @@
   - Building custom queries based of off RAD attributes
   - Persisting data based off submitted form deltas"
   (:require
-    [com.fulcrologic.rad                                  :as rad]
     [com.fulcrologic.rad.attributes                       :as rad.attr]
     [com.fulcrologic.rad.database-adapters.sql            :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
@@ -15,8 +14,7 @@
     [edn-query-language.core                              :as eql]
     [next.jdbc.sql                                        :as jdbc.sql]
     [next.jdbc.sql.builder                                :as jdbc.builder]
-    [taoensso.encore                                      :as enc]
-    [taoensso.timbre                                      :as log]))
+    [taoensso.encore                                      :as enc]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -25,11 +23,9 @@
 (defn query->plan
   "Given an EQL query, plans a sql query that would fetch the entities
   and their joins"
-  [query {:keys [::rad/attributes
-                 ::id-attribute]}]
+  [query {:keys [::rad.attr/k->attr ::rad.attr/id-attribute]}]
   (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
         table               (::rad.sql/table id-attribute)
-        k->attr             (enc/keys-by ::rad.attr/qualified-key attributes)
         ->fields
         (fn [{:keys [nodes id-attr parent-attr]}]
           (for [node nodes
@@ -104,7 +100,6 @@
                                      (every? nil? (vals (first children))))
                                  (empty children) children))
         first-if-one (fn [fields children]
-                       (sc.api/spy :first-if-one)
                        (if (= :many (::rad.attr/cardinality (first fields)))
                          children (first children)))]
     (if (seq nested-fields)
@@ -126,14 +121,14 @@
 
 (defn query
   "Wraps next.jbdc's query, but will return fully qualified keywords
-  for any matching attributes found in `::rad/attributes` in the
+  for any matching attributes found in `::attr/attributes` in the
   options map."
   [db stmt opts]
   (jdbc.sql/query (:datasource db)
     stmt
     (merge {:builder-fn sql.rs/as-qualified-maps
             :key-fn (let [idx (sql.schema/attrs->sql-col-index
-                                (::rad/attributes opts))]
+                                (::rad.attr/attributes opts))]
                       (fn [table column]
                         (get idx [table column]
                           (keyword table column))))}
@@ -143,7 +138,7 @@
 (defn where-attributes
   "Generates a query using next.jdbc's builders, and executes it. Any
   columns in the result set will be efficiently namespaced according
-  to the attributes in `::rad/attributes` option."
+  to the attributes in `::attr/attributes` option."
   [db table where opts]
   (let [where-clause (enc/map-keys sql.schema/attr->column-name where)]
     (query db (jdbc.builder/for-query table where-clause opts) opts)))
@@ -151,12 +146,12 @@
 
 (defn eql-query
   "Generates and executes a query based off off an EQL query by using
-  the `::rad.attr/attributes`. There is no restriction on the number
+  the `::rad.attr/k->attr`. There is no restriction on the number
   of joined tables, but the maximum depth of these queries are 1."
-  [db query opts]
-  (let [plan (query->plan query opts)
+  [db query env]
+  (let [plan (query->plan query env)
         sql  (plan->sql plan)
-        opts (assoc opts
+        opts (assoc env
                :builder-fn sql.rs/as-maps-with-keys
                :keys (map ::rad.attr/qualified-key (::fields plan)))
         result (jdbc.sql/query (:datasource db) [sql] opts)]

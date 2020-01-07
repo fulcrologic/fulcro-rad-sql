@@ -1,7 +1,7 @@
 (ns com.fulcrologic.rad.database-adapters.sql.resolvers
   (:require
-    [com.fulcrologic.rad.attributes                   :as attr]
     [com.fulcrologic.rad.authorization                :as auth]
+    [com.fulcrologic.rad.attributes                   :as rad.attr]
     [com.fulcrologic.rad.form                         :as rad.form]
     [com.fulcrologic.rad.database-adapters.sql        :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.query  :as sql.query]
@@ -17,26 +17,23 @@
 
 (defn entity-query
   "The entity query used by the pathom resolvers."
-  [{::rad.sql/keys [schema attributes id-attribute] :as env} input]
+  [{::rad.sql/keys [schema] :as env} input]
   (let [one? (not (sequential? input))]
     (enc/if-let [db     (get-in env [::rad.sql/databases schema])
                  query* (or
                           (get env :com.wsscode.pathom.core/parent-query)
                           (get env ::rad.sql/default-query))]
-      ;; TODO entity input
-      (let [result (sql.query/eql-query db query*
-                     {::attr/attributes attributes
-                      ::id-attribute id-attribute})]
+      (let [result (sql.query/eql-query db query* env)]
         (if one?
           (first result)
           result))
       (log/info "Unable to complete query."))))
 
 
-(defn id-resolver [id-attr attributes]
-  (enc/if-let [id-key  (::attr/qualified-key id-attr)
+(defn id-resolver [{::rad.attr/keys [id-attribute attributes k->attr]}]
+  (enc/if-let [id-key  (::attr/qualified-key id-attribute)
                outputs (attr/attributes->eql attributes)
-               schema  (::rad.sql/schema id-attr)]
+               schema  (::rad.sql/schema id-attribute)]
     {::pc/sym     (symbol
                     (str (namespace id-key))
                     (str (name id-key) "-resolver"))
@@ -44,27 +41,27 @@
      ::pc/batch?  true
      ::pc/resolve (fn [env input]
                     (auth/redact env
-                      (sql.query/entity-query
+                      (entity-query
                         (assoc env
-                          ::rad.sql/attributes attributes
-                          ::rad.sql/id-attribute id-attr
-                          ::rad.sql/schema schema
-                          ::attr/qualified-key id-key
+                          ::rad.attr/id-attribute id-attribute
+                          ::rad.attr/attributes   attributes
+                          ::rad.attr/k->attr      k->attr
+                          ::rad.sql/schema        schema
                           ::rad.sql/default-query outputs)
                         input)))
      ::pc/input   #{id-key}}
     (log/error
       "Unable to generate id-resolver. Attribute was missing schema, "
-      "or could not be found" id-attr)))
+      "or could not be found" (::attr/qualified-key id-attribute))))
 
 
 (defn generate-resolvers
   "Returns a sequence of resolvers that can resolve attributes from
   SQL databases."
   [attributes schema]
-  (let [attributes          (filter #(= schema (::rad.sql/schema %)) attributes)
-        k->attr             (enc/keys-by ::attr/qualified-key attributes)
+  (let [k->attr             (enc/keys-by ::attr/qualified-key attributes)
         id-attr->attributes (->> attributes
+                              (filter #(= schema (::rad.sql/schema %)))
                               (mapcat
                                 (fn [attribute]
                                   (for [entity-id (::rad.sql/entity-ids attribute)]
@@ -72,7 +69,9 @@
                               (group-by ::entity-id))]
     (reduce-kv
       (fn [resolvers id-attr attributes]
-        (conj resolvers (id-resolver id-attr attributes)))
+        (conj resolvers (id-resolver {::rad.attr/id-attribute id-attr
+                                      ::rad.attr/attributes   attributes
+                                      ::rad.attr/k->attr      k->attr})))
       [] id-attr->attributes)))
 
 
