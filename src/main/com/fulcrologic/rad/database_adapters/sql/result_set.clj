@@ -12,6 +12,7 @@
            (.getColumnLabel meta i)))
     (range 1 (inc (.getColumnCount meta)))))
 
+
 (defn as-qualified-maps
   "A result set builder, but instead of using a `:label-fn` and
   `:qualifier-fn`, it requires a `key-fn` in the sql-opts. `key-fn`
@@ -20,6 +21,17 @@
   [^ResultSet rs opts]
   (let [rsmeta (.getMetaData rs)
         cols   (get-column-names rsmeta opts)]
+    (jdbc.rs/->MapResultSetBuilder rs rsmeta cols)))
+
+
+(defn as-maps-with-keys
+  "A result set builder where you pass in the keys of each map in
+  order. Useful when you know ahead of time which keys will be
+  returned in what order."
+  [^ResultSet rs opts]
+  (assert (:keys opts) ":keys is required")
+  (let [rsmeta (.getMetaData rs)
+        cols   (:keys opts)]
     (jdbc.rs/->MapResultSetBuilder rs rsmeta cols)))
 
 

@@ -9,32 +9,32 @@
 
 (defattr account-id :account/id :uuid
   {::rad.attr/identity? true
-   ::rad.sql/schema :production
-   ::rad.sql/tables #{"accounts"}})
+   ::rad.sql/schema     :production
+   ::rad.sql/table      "accounts"})
 
 
 (defattr account-name :account/name :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"accounts"}})
+  {::rad.sql/schema     :production
+   ::rad.sql/entity-ids #{:account/id}})
 
 
 (defattr account-email :account/email :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"accounts"}})
+  {::rad.sql/schema     :production
+   ::rad.sql/entity-ids #{:account/id}})
 
 
 (defattr account-active? :account/active? :boolean
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"accounts"}
-   ::rad.sql/column-name "active"})
+  {::rad.sql/schema       :production
+   ::rad.sql/entity-ids   #{:account/id}
+   ::rad.sql/column-name  "active"})
 
 
 (defattr account-addresses :account/addresses :ref
-  {::rad.attr/target      :address/id
-   ::rad.attr/cardinality :many
+  {::rad.attr/cardinality :many
+   ::rad.attr/target      :address/id
    ::rad.sql/schema       :production
-   ::rad.sql/tables       #{"addresses"}
-   ::rad.sql/column-name  "account_id"})
+   ::rad.sql/entity-ids   #{:account/id} ;; Should always be one.
+   ::rad.sql/join         ["addresses" "account_id"]})
 
 
 ;; Derived data
@@ -52,12 +52,12 @@
 
 (defattr user-id :user/id :uuid
   {::rad.sql/schema :production
-   ::rad.sql/tables #{"users"}})
+   ::rad.sql/table  "users"})
 
 
 (defattr user-name :user/name :string
   {::rad.sql/schema :production
-   ::rad.sql/tables #{"users"}})
+   ::rad.sql/entity-ids #{:user/id}})
 
 
 (def user-attributes [user-id user-name])
@@ -69,17 +69,17 @@
 (defattr addr-id :address/id :uuid
   {::rad.attr/identity? true
    ::rad.sql/schema     :production
-   ::rad.sql/tables     #{"addresses"}})
+   ::rad.sql/table      "addresses"})
 
 
 (defattr addr-street :address/street :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"addresses"}})
+  {::rad.sql/schema     :production
+   ::rad.sql/entity-ids #{:address/id}})
 
 
 (defattr addr-city :address/city :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"addresses"}})
+  {::rad.sql/schema     :production
+   ::rad.sql/entity-ids #{:address/id}})
 
 
 (def states #:state {:AZ "Arizona" :KS "Kansas" :MS "Mississippi"})
@@ -88,12 +88,12 @@
   {::rad.attr/enumerated-values (set (keys states))
    ::rad.attr/labels            states
    ::rad.sql/schema             :production
-   ::rad.sql/tables             #{"addresses"}})
+   ::rad.sql/entity-ids         #{:address/id}})
 
 
 (defattr addr-zip :address/zip :string
-  {::rad.sql/schema :production
-   ::rad.sql/tables #{"addresses"}})
+  {::rad.sql/schema     :production
+   ::rad.sql/entity-ids #{:address/id}})
 
 
 (def address-attributes [addr-id addr-street addr-city addr-state addr-zip])

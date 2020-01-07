@@ -7,7 +7,7 @@
   - Persisting data based off submitted form deltas"
   (:require
     [com.fulcrologic.rad                                  :as rad]
-    [com.fulcrologic.rad.attributes                       :as attr]
+    [com.fulcrologic.rad.attributes                       :as rad.attr]
     [com.fulcrologic.rad.database-adapters.sql            :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
     [com.fulcrologic.rad.database-adapters.sql.schema     :as sql.schema]
@@ -20,7 +20,109 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Custom queries
+;; Entity / EQL query
+
+(defn query->plan
+  "Given an EQL query, plans a sql query that would fetch the entities
+  and their joins"
+  [query {:keys [::rad/attributes
+                 ::id-attribute]}]
+  (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
+        table               (::rad.sql/table id-attribute)
+        k->attr             (enc/keys-by ::rad.attr/qualified-key attributes)
+        ->fields
+        (fn [{:keys [nodes id-attr parent-attr]}]
+          (for [node nodes
+                :let [k (:dispatch-key node)
+                      attr (k->attr k)]]
+            {::rad.attr/qualified-key k
+             ::rad.attr/cardinality   (::rad.attr/cardinality parent-attr)
+             ::rad.sql/table          (::rad.sql/table id-attr)
+             ::rad.sql/column         (sql.schema/attr->column-name attr)
+             ::parent-key             (::rad.attr/qualified-key parent-attr)}))]
+    {::fields (apply concat
+                (->fields {:nodes prop :id-attr id-attribute})
+                (for [node join]
+                  (enc/if-let [parent-attr (-> node :dispatch-key k->attr)
+                               target-attr (-> parent-attr ::rad.attr/target k->attr)]
+                    (->fields {:nodes       (:children node)
+                               :id-attr     target-attr
+                               :parent-attr parent-attr})
+                    (throw (ex-info "Invalid target for join"
+                             {:key (:dispatch-key node)})))))
+     ::from table
+     ::joins (for [node join
+                   :let [attr (k->attr (:dispatch-key node))]]
+               [(::rad.sql/join attr)
+                [table (sql.schema/attr->column-name id-attribute)]])
+     ::group (when (seq join)
+               [[table (sql.schema/attr->column-name id-attribute)]])}))
+
+
+(defn plan->sql
+  "Given a query plan, return the sql statement that matches the plan"
+  [{::keys [fields from joins group]}]
+  (let [field-name (partial format "%s.\"%s\"")
+        fields-sql (str/join ", " (for [{::rad.sql/keys [table column]
+                                         ::keys [parent-key]} fields]
+                                    (if parent-key
+                                      (format "array_agg(%s)" (field-name table column))
+                                      (field-name table column))))
+        join-sql   (str/join " "
+                     (for [[[ltable lcolumn] [rtable rcolumn]] joins]
+                       (str "LEFT JOIN " ltable " ON "
+                         (field-name ltable lcolumn) " = "
+                         (field-name rtable rcolumn))))
+        group-sql  (when (seq group)
+                     (str "GROUP BY "
+                       (str/join ", "
+                         (for [[table column] group]
+                           (field-name table column)))))]
+    (format "SELECT %s FROM %s %s %s" fields-sql from join-sql group-sql)))
+
+
+(defn- unnest
+  "A helper function to unnest aggregated values in a to many ref.
+  Example:
+  ``` clojure
+  {:account/id [1 2] :account/name [\"Name1\" \"name2\"]}
+  => [{:account/id 1 :account/name \"Name1\"}
+      {:account/id 2 :account/name \"Name2\"}]
+  ``` "
+  [record ks]
+  (apply map
+    (fn [& vals] (zipmap ks vals))
+    (map record ks)))
+
+
+(defn parse-executed-plan
+  "After a plan is executed, unnest any aggregated nested fields"
+  [{::keys [fields]} result]
+  (let [nested-fields (group-by ::parent-key (filter ::parent-key fields))
+        clean-left-join-nils (fn [children]
+                               (if (and (= (count children) 1)
+                                     (every? nil? (vals (first children))))
+                                 (empty children) children))
+        first-if-one (fn [fields children]
+                       (sc.api/spy :first-if-one)
+                       (if (= :many (::rad.attr/cardinality (first fields)))
+                         children (first children)))]
+    (if (seq nested-fields)
+      (for [record result]
+        (reduce-kv
+          (fn [record parent-key fields]
+            (assoc (apply dissoc record (map ::rad.attr/qualified-key fields))
+              parent-key (->> (map ::rad.attr/qualified-key fields)
+                           (unnest record)
+                           (clean-left-join-nils)
+                           (first-if-one fields))))
+          record nested-fields))
+      result)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Public
+
 
 (defn query
   "Wraps next.jbdc's query, but will return fully qualified keywords
@@ -47,129 +149,18 @@
     (query db (jdbc.builder/for-query table where-clause opts) opts)))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entity query
-
-
-(defn query->plan
-  "Given an EQL query, plans a sql query that would fetch the entities
-  and their joins"
-  [query {:keys [::rad/attributes
-                 ::id-attribute]}]
-  (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
-        table               (sql.schema/attr->table-name id-attribute)
-        k->attr             (enc/keys-by ::attr/qualified-key attributes)
-        k->column           (comp sql.schema/attr->column-name k->attr)
-        node->column        (comp k->column :dispatch-key)
-        node->table         (comp sql.schema/attr->table-name k->attr :dispatch-key)
-
-        ->columns           (fn [{:keys [nodes pk-attr]}]
-                              (-> (keep node->column nodes)
-                                (conj (sql.schema/attr->column-name pk-attr))
-                                (distinct)))]
-    {::fields (concat
-                ;; Entity fields
-                [[table (->columns {:nodes prop :pk-attr id-attribute})]]
-                ;; Join fields
-                (for [node join]
-                  (if-let [pk-attr (-> node
-                                     :dispatch-key k->attr
-                                     ::attr/target k->attr)]
-                    [(node->table node)
-                     (->columns {:nodes (:children node)
-                                 :pk-attr pk-attr})]
-                    (throw (ex-info "Invalid target for join"
-                             {:key (:dispatch-key node)})))))
-     ::from table
-     ::joins (for [node join]
-               [[(node->table node) (node->column node)]
-                [table (sql.schema/attr->column-name id-attribute)]])
-     :parser/entity-key  (::attr/qualified-key id-attribute)
-     :parser/entity-keys (map :dispatch-key prop)
-     :parser/nested-key  (:dispatch-key (first join))
-     :parser/nested-keys (map :dispatch-key (:children (first join)))}))
-
-
-(defn plan->sql
-  "Given a query plan, return the sql statement that matches the plan"
-  [{::keys [fields from joins]}]
-  (str "SELECT " (str/join ", " (for [[table cols] fields
-                                      col cols]
-                                  (str table ".\"" col \")))
-    " FROM " from
-    (when (seq joins)
-      (str/join ", "
-        (for [[[ltable lcolumn] [rtable rcolumn]] joins]
-          (str " LEFT JOIN " ltable " ON "
-            ltable ".\"" lcolumn "\" = "
-            rtable ".\"" rcolumn \"))))))
-
-
-(defn parse-eql-result
-  "Groups and nests all entities with their joins after executing the
-  plan"
-  [result {:parser/keys [entity-key entity-keys nested-key nested-keys]}]
-  (->> result
-    (group-by entity-key)
-    (vals)
-    (map (fn [group]
-           (assoc (select-keys (first group) entity-keys)
-             nested-key (->> group
-                          (filter #(some % nested-keys))
-                          (map #(select-keys % nested-keys))))))))
-
-
-(defn eql-query [db q opts]
-  (let [plan (query->plan q opts)
+(defn eql-query
+  "Generates and executes a query based off off an EQL query by using
+  the `::rad.attr/attributes`. There is no restriction on the number
+  of joined tables, but the maximum depth of these queries are 1."
+  [db query opts]
+  (let [plan (query->plan query opts)
         sql  (plan->sql plan)
-        result (query db [sql] opts)]
-    (with-meta (parse-eql-result result plan)
-      {::sql sql})))
-
-
-(defn- id->query-value [id-attr v]
-  (let [t (::attr/type id-attr)]
-    (case t
-      (:text :uuid) (str "'" v "'")
-      v)))
-
-
-(defn- column-names [attributes query]
-  (let [desired-keys       (->> query
-                             (eql/query->ast)
-                             (:children)
-                             (map :dispatch-key)
-                             (set))
-        desired-attributes (filterv
-                             #(contains? desired-keys (::attr/qualified-key %))
-                             attributes)]
-    (mapv sql.schema/attr->column-name desired-attributes)))
-
-
-(defn entity-query [{::rad.sql/keys [schema attributes id-attribute] :as env} input]
-  (let [one? (not (sequential? input))]
-    (enc/if-let [db               (get-in env [::rad.sql/databases schema])
-                 id-key           (::attr/qualified-key id-attribute)
-                 table            (sql.schema/attr->table-name id-attribute)
-                 query*           (or
-                                    (get env :com.wsscode.pathom.core/parent-query)
-                                    (get env ::rad.sql/default-query))
-                 to-v             (partial id->query-value id-attribute)
-                 ids              (if one?
-                                    [(to-v (get input id-key))]
-                                    (into [] (keep #(some-> %
-                                                      (get id-key)
-                                                      to-v) input)))
-                 sql              (str
-                                    "SELECT " (str/join ", "
-                                                (column-names attributes query*))
-                                    " FROM " table
-                                    " WHERE " (sql.schema/attr->column-name id-attribute)
-                                    " IN (" (str/join "," ids) ")")]
-      (do
-        (log/info "Running" sql "on entities with " id-key ":" ids)
-        (let [result (query db [sql] {::rad/attributes attributes})]
-          (if one?
-            (first result)
-            result)))
-      (log/info "Unable to complete query."))))
+        opts (assoc opts
+               :builder-fn sql.rs/as-maps-with-keys
+               :keys (map ::rad.attr/qualified-key (::fields plan)))
+        result (jdbc.sql/query (:datasource db) [sql] opts)]
+    (with-meta
+      (parse-executed-plan plan result)
+      {::sql sql
+       ::plan plan})))

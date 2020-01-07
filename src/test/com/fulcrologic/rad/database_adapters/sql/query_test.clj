@@ -1,10 +1,13 @@
 (ns com.fulcrologic.rad.database-adapters.sql.query-test
   (:require
     [com.fulcrologic.rad                                           :as rad]
+    [com.fulcrologic.rad.attributes                                :as rad.attr]
+    [com.fulcrologic.rad.database-adapters.sql                     :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.query               :as sql.query]
     [com.fulcrologic.rad.database-adapters.test-helpers.attributes :as attrs]
-    [fulcro-spec.core :refer [specification component assertions]]
-    [clojure.string :as str]))
+    [clojure.string                                                :as str]
+    [com.fulcrologic.rad.attributes                                :as rad.attr]
+    [fulcro-spec.core :refer [specification component assertions]]))
 
 
 (def SIMPLE_QUERY
@@ -18,46 +21,53 @@
                         :address/city]}])
 
 
-(def NESTED_QUERY_NO_PK
-  [:account/name {:account/addresses [:address/street]}])
-
-
 (specification "query->plan"
   (let [params {::sql.query/id-attribute attrs/account-id
-                ::rad/attributes   attrs/all-attributes}]
+                ::rad/attributes   attrs/all-attributes}
+        simplify (juxt ::rad.attr/qualified-key ::rad.sql/table ::rad.sql/column)]
 
     (component "Top level query"
-      (let [result (sql.query/query->plan SIMPLE_QUERY params)]
+      (let [result   (sql.query/query->plan SIMPLE_QUERY params)]
         (assertions
           "selects the requested fields"
-          (::sql.query/fields result)
-          => [["accounts" ["id" "name" "active"]]]
+          (map simplify (::sql.query/fields result))
+          => [[:account/id      "accounts" "id"]
+              [:account/name    "accounts" "name"]
+              [:account/active? "accounts" "active"]]
 
           "uses the requested table"
           (::sql.query/from result)
-          => "accounts")))
+          => "accounts"
+
+          "doesn't need grouping"
+          (::sql.query/group result)
+          => nil)))
 
     (component "Nested query"
-      (let [result (sql.query/query->plan NESTED_QUERY params)]
+      (let [result (sql.query/query->plan NESTED_QUERY params)
+            joined-fields (drop 3 (::sql.query/fields result))]
         (assertions
           "Selects nested fields"
-          (second (::sql.query/fields result))
-          => ["addresses" ["id" "street" "city"]]
+          (map simplify joined-fields)
+          => [[:address/id     "addresses" "id"]
+              [:address/street "addresses" "street"]
+              [:address/city   "addresses" "city"]]
+
+          "Keeps the parent-key"
+          (map ::sql.query/parent-key joined-fields)
+          => [:account/addresses :account/addresses :account/addresses]
+
+          "Uses cardinality of parent"
+          (map ::rad.attr/cardinality joined-fields)
+          => [:many :many :many]
 
           "Joins to the nested table"
           (first (::sql.query/joins result))
-          => [["addresses" "account_id"] ["accounts" "id"]])))
+          => [["addresses" "account_id"] ["accounts" "id"]]
 
-    (component "Nested query without primary keys"
-      (let [result (sql.query/query->plan NESTED_QUERY_NO_PK params)]
-        (assertions
-          "selects top-level primary keys anyway"
-          (first (::sql.query/fields result))
-          => ["accounts" ["id" "name"]]
-
-          "selects nested primary keys anyway"
-          (second (::sql.query/fields result))
-          => ["addresses" ["id" "street"]])))))
+          "Groups by parent's PK"
+          (::sql.query/group result)
+          => [["accounts" "id"]])))))
 
 
 (def EXPECTED_SQL ""
@@ -67,11 +77,12 @@ SELECT
  accounts.\"id\",
  accounts.\"name\",
  accounts.\"active\",
- addresses.\"id\",
- addresses.\"street\",
- addresses.\"city\"
+ array_agg(addresses.\"id\"),
+ array_agg(addresses.\"street\"),
+ array_agg(addresses.\"city\")
  FROM accounts
  LEFT JOIN addresses ON addresses.\"account_id\" = accounts.\"id\"
+ GROUP BY accounts.\"id\"
 " #"\n" ""))
 
 
