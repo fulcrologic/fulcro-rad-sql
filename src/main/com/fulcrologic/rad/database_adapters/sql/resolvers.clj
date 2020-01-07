@@ -23,7 +23,7 @@
                  query* (or
                           (get env :com.wsscode.pathom.core/parent-query)
                           (get env ::rad.sql/default-query))]
-      (let [result (sql.query/eql-query db query* env)]
+      (let [result (sql.query/eql-query db query* input env)]
         (if one?
           (first result)
           result))

@@ -1,12 +1,11 @@
 (ns com.fulcrologic.rad.database-adapters.sql.query-test
   (:require
-    [com.fulcrologic.rad                                           :as rad]
     [com.fulcrologic.rad.attributes                                :as rad.attr]
     [com.fulcrologic.rad.database-adapters.sql                     :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.query               :as sql.query]
     [com.fulcrologic.rad.database-adapters.test-helpers.attributes :as attrs]
     [clojure.string                                                :as str]
-    [com.fulcrologic.rad.attributes                                :as rad.attr]
+    [taoensso.encore                                               :as enc]
     [fulcro-spec.core :refer [specification component assertions]]))
 
 
@@ -22,12 +21,13 @@
 
 
 (specification "query->plan"
-  (let [params {::sql.query/id-attribute attrs/account-id
-                ::rad/attributes   attrs/all-attributes}
+  (let [params {::rad.sql/id-attribute attrs/account-id
+                ::rad.attr/k->attr     (enc/keys-by ::rad.attr/qualified-key
+                                         attrs/all-attributes)}
         simplify (juxt ::rad.attr/qualified-key ::rad.sql/table ::rad.sql/column)]
 
     (component "Top level query"
-      (let [result   (sql.query/query->plan SIMPLE_QUERY params)]
+      (let [result   (sql.query/query->plan SIMPLE_QUERY {} params)]
         (assertions
           "selects the requested fields"
           (map simplify (::sql.query/fields result))
@@ -44,7 +44,7 @@
           => nil)))
 
     (component "Nested query"
-      (let [result (sql.query/query->plan NESTED_QUERY params)
+      (let [result (sql.query/query->plan NESTED_QUERY {} params)
             joined-fields (drop 3 (::sql.query/fields result))]
         (assertions
           "Selects nested fields"
@@ -82,14 +82,36 @@ SELECT
  array_agg(addresses.\"city\")
  FROM accounts
  LEFT JOIN addresses ON addresses.\"account_id\" = accounts.\"id\"
+  GROUP BY accounts.\"id\"
+" #"\n" ""))
+
+
+(def EXPECTED_SQL_WHERE ""
+  (str/replace
+    "
+SELECT
+ accounts.\"id\",
+ accounts.\"name\",
+ accounts.\"active\",
+ array_agg(addresses.\"id\"),
+ array_agg(addresses.\"street\"),
+ array_agg(addresses.\"city\")
+ FROM accounts
+ LEFT JOIN addresses ON addresses.\"account_id\" = accounts.\"id\"
+ WHERE accounts.\"id\" = ?
  GROUP BY accounts.\"id\"
 " #"\n" ""))
 
 
 (specification "plan>sql"
-  (let [params     {::sql.query/id-attribute attrs/account-id
-                    ::rad/attributes   attrs/all-attributes}
-        plan       (sql.query/query->plan NESTED_QUERY params)]
+  (let [params     {::rad.sql/id-attribute attrs/account-id
+                    ::rad.attr/k->attr     (enc/keys-by ::rad.attr/qualified-key
+                                             attrs/all-attributes)}
+        plan       (sql.query/query->plan NESTED_QUERY {} params)
+        plan-where (sql.query/query->plan NESTED_QUERY {:account/id 12} params)]
 
     (assertions "interprets a plan with joins"
-      (sql.query/plan->sql plan) => EXPECTED_SQL)))
+      (sql.query/plan->sql plan) => [EXPECTED_SQL])
+
+    (assertions "interprets a plan with a where clause"
+      (sql.query/plan->sql plan-where) => [EXPECTED_SQL_WHERE 12])))

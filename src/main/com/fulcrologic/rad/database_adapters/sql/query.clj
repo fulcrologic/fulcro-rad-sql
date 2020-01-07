@@ -23,7 +23,7 @@
 (defn query->plan
   "Given an EQL query, plans a sql query that would fetch the entities
   and their joins"
-  [query {:keys [::rad.attr/k->attr ::rad.attr/id-attribute]}]
+  [query where {:keys [::rad.attr/k->attr ::rad.sql/id-attribute]}]
   (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
         table               (::rad.sql/table id-attribute)
         ->fields
@@ -51,31 +51,43 @@
                    :let [attr (k->attr (:dispatch-key node))]]
                [(::rad.sql/join attr)
                 [table (sql.schema/attr->column-name id-attribute)]])
+     ::where (enc/map-keys
+               ;; TODO table may be incorrect
+               #(format "%s.\"%s\"" table
+                  (sql.schema/attr->column-name (k->attr %)))
+               where)
      ::group (when (seq join)
                [[table (sql.schema/attr->column-name id-attribute)]])}))
 
 
 (defn plan->sql
   "Given a query plan, return the sql statement that matches the plan"
-  [{::keys [fields from joins group]}]
+  [{::keys [fields from joins where group]}]
   (let [field-name (partial format "%s.\"%s\"")
         fields-sql (str/join ", " (for [{::rad.sql/keys [table column]
                                          ::keys [parent-key]} fields]
                                     (if parent-key
-                                      (format "array_agg(%s)" (field-name table column))
+                                      (format "array_agg(%s)"
+                                        (field-name table column))
                                       (field-name table column))))
         join-sql   (str/join " "
                      (for [[[ltable lcolumn] [rtable rcolumn]] joins]
                        (str "LEFT JOIN " ltable " ON "
                          (field-name ltable lcolumn) " = "
                          (field-name rtable rcolumn))))
-        group-sql  (when (seq group)
+        where-stmt (if (seq where)
+                     (jdbc.builder/by-keys where :where {})
+                     [""])
+        group-sql  (if (seq group)
                      (str "GROUP BY "
                        (str/join ", "
                          (for [[table column] group]
-                           (field-name table column)))))]
-    (format "SELECT %s FROM %s %s %s" fields-sql from join-sql group-sql)))
-
+                           (field-name table column))))
+                     "")]
+    (into
+      [(format "SELECT %s FROM %s %s %s %s" fields-sql from join-sql
+         (first where-stmt) group-sql)]
+      (rest where-stmt))))
 
 (defn- unnest
   "A helper function to unnest aggregated values in a to many ref.
@@ -128,34 +140,25 @@
     stmt
     (merge {:builder-fn sql.rs/as-qualified-maps
             :key-fn (let [idx (sql.schema/attrs->sql-col-index
-                                (::rad.attr/attributes opts))]
+                                (::rad.attr/k->attr opts))]
                       (fn [table column]
                         (get idx [table column]
                           (keyword table column))))}
       opts)))
 
 
-(defn where-attributes
-  "Generates a query using next.jdbc's builders, and executes it. Any
-  columns in the result set will be efficiently namespaced according
-  to the attributes in `::attr/attributes` option."
-  [db table where opts]
-  (let [where-clause (enc/map-keys sql.schema/attr->column-name where)]
-    (query db (jdbc.builder/for-query table where-clause opts) opts)))
-
-
 (defn eql-query
   "Generates and executes a query based off off an EQL query by using
   the `::rad.attr/k->attr`. There is no restriction on the number
   of joined tables, but the maximum depth of these queries are 1."
-  [db query env]
-  (let [plan (query->plan query env)
-        sql  (plan->sql plan)
+  [db query where env]
+  (let [plan (query->plan query where env)
+        stmt (plan->sql plan)
         opts (assoc env
                :builder-fn sql.rs/as-maps-with-keys
                :keys (map ::rad.attr/qualified-key (::fields plan)))
-        result (jdbc.sql/query (:datasource db) [sql] opts)]
+        result (jdbc.sql/query (:datasource db) stmt opts)]
     (with-meta
       (parse-executed-plan plan result)
-      {::sql sql
+      {::sql (first stmt)
        ::plan plan})))

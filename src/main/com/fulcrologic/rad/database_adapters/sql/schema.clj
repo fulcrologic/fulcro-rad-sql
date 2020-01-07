@@ -7,19 +7,21 @@
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]))
 
 
-(defn attr->table-names [{::rad.sql/keys [tables]}]
+(defn attr->table-names
+  "BROKEN: Fix migrations"
+  [{::rad.sql/keys [tables]}]
   tables)
 
 
 (defn attr->table-name
-  "DEPRECATED: Helpful but temporary, until we cleanup up the multi db / table
-  story"
-  [{::rad.sql/keys [tables]}]
-  (first tables))
+  ([_] ;; Broken for now
+   )
+  ([k->attr {:keys [::rad.sql/entity-ids ::rad.sql/table]}]
+   (or table (get-in k->attr [(first entity-ids) ::rad.sql/table]))))
 
 
 (defn attr->column-name [{::rad.attr/keys [qualified-key]
-                          ::rad.sql/keys      [column-name]}]
+                          ::rad.sql/keys  [column-name]}]
   (or
     column-name
     (some-> qualified-key name csk/->snake_case)))
@@ -28,8 +30,8 @@
 (defn attrs->sql-col-index
   "Takes a list of rad attributes and returns an index of the form
   `{[table column] :qualified/keyword}`"
-  [attributes]
+  [k->attr]
   (into {}
-    (for [attr attributes]
-      [[(attr->table-name attr) (attr->column-name attr)]
+    (for [[_ attr] k->attr]
+      [[(attr->table-name k->attr attr) (attr->column-name attr)]
        (::rad.attr/qualified-key attr)])))
