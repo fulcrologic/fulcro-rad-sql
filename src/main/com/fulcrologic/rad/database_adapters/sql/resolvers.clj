@@ -15,31 +15,47 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Reads
 
-;; TODO: This is nearly identical to the Datomic one...helper function
-;; would be nice
+(defn entity-query
+  "The entity query used by the pathom resolvers."
+  [{::rad.sql/keys [schema attributes id-attribute] :as env} input]
+  (let [one? (not (sequential? input))]
+    (enc/if-let [db     (get-in env [::rad.sql/databases schema])
+                 query* (or
+                          (get env :com.wsscode.pathom.core/parent-query)
+                          (get env ::rad.sql/default-query))]
+      ;; TODO entity input
+      (let [result (sql.query/eql-query db query*
+                     {::attr/attributes attributes
+                      ::id-attribute id-attribute})]
+        (if one?
+          (first result)
+          result))
+      (log/info "Unable to complete query."))))
+
+
 (defn id-resolver [id-attr attributes]
-  (enc/if-let [id-key        (::attr/qualified-key id-attr)
-               outputs       (attr/attributes->eql attributes)
-               schema        (::rad.sql/schema id-attr)]
+  (enc/if-let [id-key  (::attr/qualified-key id-attr)
+               outputs (attr/attributes->eql attributes)
+               schema  (::rad.sql/schema id-attr)]
     {::pc/sym     (symbol
                     (str (namespace id-key))
                     (str (name id-key) "-resolver"))
      ::pc/output  outputs
      ::pc/batch?  true
-     ::pc/resolve (fn [env input] (->>
-                                    (sql.query/entity-query
-                                      (assoc env
-                                        ::rad.sql/attributes attributes
-                                        ::rad.sql/id-attribute id-attr
-                                        ::rad.sql/schema schema
-                                        ::attr/qualified-key id-key
-                                        ::rad.sql/default-query outputs)
-                                      input)
-                                    (auth/redact env)))
+     ::pc/resolve (fn [env input]
+                    (auth/redact env
+                      (sql.query/entity-query
+                        (assoc env
+                          ::rad.sql/attributes attributes
+                          ::rad.sql/id-attribute id-attr
+                          ::rad.sql/schema schema
+                          ::attr/qualified-key id-key
+                          ::rad.sql/default-query outputs)
+                        input)))
      ::pc/input   #{id-key}}
     (log/error
-      "Unable to generate id-resolver. Attribute was missing schema, or"
-      "could not be found in the attribute registry: " id-attr)))
+      "Unable to generate id-resolver. Attribute was missing schema, "
+      "or could not be found" id-attr)))
 
 
 (defn generate-resolvers
@@ -47,23 +63,13 @@
   SQL databases."
   [attributes schema]
   (let [attributes          (filter #(= schema (::rad.sql/schema %)) attributes)
-        table->id-attribute (reduce
-                              (fn [m {::attr/keys [identity?]
-                                      ::rad.sql/keys      [tables] :as attr}]
-                                (if identity?
-                                  (reduce
-                                    (fn [m2 t] (assoc m2 t attr))
-                                    m
-                                    tables)
-                                  m))
-                              {} attributes)
+        k->attr             (enc/keys-by ::attr/qualified-key attributes)
         id-attr->attributes (->> attributes
                               (mapcat
                                 (fn [attribute]
-                                  (for [table (get attribute ::rad.sql/tables)
-                                        :let [id-attr (table->id-attribute table)]]
-                                    (assoc attribute ::rad.sql/k id-attr))))
-                              (group-by ::rad.sql/k))]
+                                  (for [entity-id (::rad.sql/entity-ids attribute)]
+                                    (assoc attribute ::entity-id (k->attr entity-id)))))
+                              (group-by ::entity-id))]
     (reduce-kv
       (fn [resolvers id-attr attributes]
         (conj resolvers (id-resolver id-attr attributes)))
