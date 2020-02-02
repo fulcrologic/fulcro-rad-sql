@@ -26,7 +26,7 @@
    :boolean  "BOOLEAN"
    :int      "INTEGER"
    :long     "BIGINT"
-   :money    "decimal(20,2)"
+   :decimal  "decimal(20,2)"
    :inst     "BIGINT"
    :keyword  "TEXT"
    :symbol   "TEXT"
