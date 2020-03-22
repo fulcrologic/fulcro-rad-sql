@@ -22,6 +22,7 @@
    :symbol   "TEXT"
    :uuid     "UUID"})
 
+;; TASK: Review this generation, and use it in demo instead of flyway?
 (defn attr->sql [schema-name {::attr/keys [type identity?]
                               ::rad.sql/keys      [schema]
                               :as         attr}]
