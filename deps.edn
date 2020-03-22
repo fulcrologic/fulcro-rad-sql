@@ -4,21 +4,22 @@
            camel-snake-kebab          {:mvn/version "0.4.0"}
            com.taoensso/timbre        {:mvn/version "4.10.0"}
            com.taoensso/encore        {:mvn/version "2.115.0"}
-           com.fulcrologic/guardrails {:mvn/version "0.0.9"}
-           com.fulcrologic/fulcro-rad {:mvn/version "0.0.1-SNAPSHOT" :scope "provided"}
-           seancorfield/next.jdbc     {:mvn/version "1.0.12"}
-           com.zaxxer/HikariCP        {:mvn/version "3.4.1"}
+           com.fulcrologic/guardrails {:mvn/version "0.0.12"}
+           com.fulcrologic/fulcro-rad {:mvn/version "0.0.1-alpha-10-SNAPSHOT"}
+           seancorfield/next.jdbc     {:mvn/version "1.0.409"}
+           com.zaxxer/HikariCP        {:mvn/version "3.4.2"}
            org.flywaydb/flyway-core   {:mvn/version "4.2.0"}
-           com.wsscode/pathom         {:mvn/version "2.2.26"}
-           org.clojure/clojure        {:mvn/version "1.10.1" :scope "provided"}}
+           com.wsscode/pathom         {:mvn/version "2.2.31"}
+           org.clojure/clojure        {:mvn/version "1.10.1"}}
 
  :aliases {:test      {:extra-paths ["src/test"]
                        :extra-deps  {fulcrologic/fulcro-spec {:mvn/version "3.1.4"}}}
 
            :clj-tests {:extra-paths ["src/test"]
                        :main-opts   ["-m" "kaocha.runner"]
-                       :extra-deps  {lambdaisland/kaocha {:mvn/version "0.0-554"}}}
+                       :extra-deps  {lambdaisland/kaocha {:mvn/version "0.0-601"}}}
 
            :dev       {:extra-paths ["src/dev" "resources"]
                        :extra-deps  {org.clojure/tools.namespace {:mvn/version "0.3.1"}
+                                     com.h2database/h2           {:mvn/version "1.4.200"}
                                      org.postgresql/postgresql   {:mvn/version "42.2.8"}}}}}
