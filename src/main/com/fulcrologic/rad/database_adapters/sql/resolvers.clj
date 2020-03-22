@@ -1,5 +1,6 @@
 (ns com.fulcrologic.rad.database-adapters.sql.resolvers
   (:require
+    [clojure.pprint :refer [pprint]]
     [com.fulcrologic.rad.authorization :as auth]
     [com.fulcrologic.rad.attributes :as rad.attr]
     [com.fulcrologic.rad.form :as rad.form]
@@ -111,9 +112,11 @@
   [{::rad.attr/keys [key->attribute]
     ::rad.sql/keys  [connection-pools]
     :as             env} {::rad.form/keys [delta]}]
+  (log/info "SQL Save of delta " (with-out-str (pprint delta)))
   (doseq [{:tx/keys       [attrs where]
            ::rad.sql/keys [schema table]
            :as            tx} (delta->txs key->attribute delta)]
+    (log/info "SQL steps: " (with-out-str (pprint tx)))
     (enc/if-let [schema-pool (get connection-pools schema)
                  db          (get-in env [::rad.sql/databases schema])]
       (jdbc.sql/update! (:datasource db) table attrs where)
