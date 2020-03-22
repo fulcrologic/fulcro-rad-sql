@@ -10,7 +10,6 @@
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariDataSource)))
 
-
 (def type-map
   {:string   "TEXT"
    :password "TEXT"
@@ -22,7 +21,6 @@
    :keyword  "TEXT"
    :symbol   "TEXT"
    :uuid     "UUID"})
-
 
 (defn attr->sql [schema-name {::attr/keys [type identity?]
                               ::rad.sql/keys      [schema]
@@ -46,7 +44,6 @@
         (when (nil? (get type-map type))
           (str " (No mapping for type " type ")"))))))
 
-
 (defn automatic-schema
   "Returns SQL schema for all attributes that support it."
   [schema-name attributes]
@@ -55,8 +52,6 @@
       "BEGIN;\n"
       (str/join "\n" statements)
       "COMMIT;\n")))
-
-
 
 (defn migrate! [config all-attributes connection-pools]
   (let [database-map (some-> config ::rad.sql/databases)]

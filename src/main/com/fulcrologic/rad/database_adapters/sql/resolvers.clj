@@ -105,16 +105,21 @@
      :tx/attrs        (enc/map-vals :after entity-diff)
      :tx/where        {id-k id}}))
 
-
 (defn save-form!
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"
-  [{::rad.attr/keys [key->attribute] :as env} {::rad.form/keys [delta]}]
+  [{::rad.attr/keys [key->attribute]
+    ::rad.sql/keys  [connection-pools]
+    :as             env} {::rad.form/keys [delta]}]
   (doseq [{:tx/keys       [attrs where]
            ::rad.sql/keys [schema table]
            :as            tx} (delta->txs key->attribute delta)]
-    (if-let [db (get-in env [::rad.sql/databases schema])]
+    (enc/if-let [schema-pool (get connection-pools schema)
+                 db          (get-in env [::rad.sql/databases schema])]
       (jdbc.sql/update! (:datasource db) table attrs where)
       (throw (ex-info "No connection found for SQL transaction"
                {:type ::rad.sql/missing-connection
                 :tx   tx})))))
+
+(defn delete-entity! [env params]
+  (log/error "DELETE NOT IMPLEMENTED" params))
