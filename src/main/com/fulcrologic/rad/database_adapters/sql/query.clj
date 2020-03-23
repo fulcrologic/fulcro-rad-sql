@@ -36,7 +36,7 @@
                   {::rad.attr/qualified-key k
                    ::rad.attr/cardinality   (::rad.attr/cardinality parent-attr)
                    ::rad.sql/table          (::rad.sql/table id-attr)
-                   ::rad.sql/column         (sql.schema/attr->column-name attr)
+                   ::rad.sql/column         (sql.schema/column-name attr)
                    ::parent-key             (::rad.attr/qualified-key parent-attr)}))]
     {::fields (apply concat
                 (->fields {:nodes prop :id-attr id-attribute})
@@ -52,14 +52,14 @@
      ::joins  (for [node join
                     :let [attr (k->attr (:dispatch-key node))]]
                 [(::rad.sql/join attr)
-                 [table (sql.schema/attr->column-name id-attribute)]])
+                 [table (sql.schema/column-name id-attribute)]])
      ::where  (enc/map-keys
                 ;; TODO table may be incorrect
                 #(format "%s.\"%s\"" table
-                   (sql.schema/attr->column-name (k->attr %)))
+                   (sql.schema/column-name (k->attr %)))
                 where)
      ::group  (when (seq join)
-                [[table (sql.schema/attr->column-name id-attribute)]])}))
+                [[table (sql.schema/column-name id-attribute)]])}))
 
 
 (defn plan->sql
