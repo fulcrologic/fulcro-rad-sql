@@ -38,23 +38,24 @@
                    ::rad.sql/table          (sql.schema/table-name id-attr)
                    ::rad.sql/column         (sql.schema/column-name attr)
                    ::parent-key             (::rad.attr/qualified-key parent-attr)}))]
-    {::fields (vec (apply concat
-                     (->fields {:nodes prop :id-attr id-attribute})
-                     (for [node join]
-                       (enc/if-let [parent-attr (-> node :dispatch-key key->attribute)
-                                    target-attr (-> parent-attr ::rad.attr/target key->attribute)]
-                         (->fields {:nodes       (:children node)
-                                    :id-attr     target-attr
-                                    :parent-attr parent-attr})
-                         (throw (ex-info "Invalid target for join"
-                                  {:key (:dispatch-key node)}))))))
+    {::fields (remove nil? (apply concat
+                             (->fields {:nodes prop :id-attr id-attribute})
+                             (for [node join]
+                               (enc/if-let [{::rad.attr/keys [cardinality] :as parent-attr} (-> node :dispatch-key key->attribute)
+                                            target-attr (-> parent-attr ::rad.attr/target key->attribute)
+                                            tk          (::rad.attr/qualified-key target-attr)]
+                                 (when (= :many cardinality)
+                                   (->fields {:nodes       [{:type :prop :key tk :dispatch-key tk}] #_(:children node)
+                                             :id-attr     target-attr
+                                             :parent-attr parent-attr}))
+                                 (throw (ex-info "Invalid target for join"
+                                          {:key (:dispatch-key node)}))))))
      ::from   table
 
      ::joins  (for [node join
                     :let [{::rad.attr/keys [target cardinality identities] :as attr} (key->attribute (:dispatch-key node))
                           column-name (sql.schema/column-name attr)]]
-                (if (= :one cardinality)
-                  [table column-name]
+                (when (= :many cardinality)
                   (let [reverse-target-attr (key->attribute (first identities))
                         rev-target-table    (sql.schema/table-name reverse-target-attr)
                         rev-target-column   (sql.schema/column-name reverse-target-attr)
@@ -63,7 +64,6 @@
                         table               (sql.schema/table-name (key->attribute target))
                         column              (or
                                               (::rad.sql/column-name attr)
-                                              ;; account_addresses_account_id
                                               (str/join "_" [origin-table origin-column rev-target-table rev-target-column]))]
                     [[table column]
                      [rev-target-table rev-target-column]])))
@@ -74,7 +74,6 @@
                 where)
      ::group  (when (seq join)
                 [[table (sql.schema/column-name id-attribute)]])}))
-
 
 (defn plan->sql
   "Given a query plan, return the sql statement that matches the plan"
@@ -121,6 +120,12 @@
   (apply map
     (fn [& vals] (zipmap ks vals))
     (map record ks)))
+
+(comment
+  (unnest
+    {:account/id        1
+     :account/addresses [1 2]} [:account/addresses])
+  )
 
 
 (defn parse-executed-plan

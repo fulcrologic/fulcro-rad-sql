@@ -26,14 +26,10 @@
                  query*      (or
                                (get env :com.wsscode.pathom.core/parent-query)
                                (get env ::rad.sql/default-query))]
-      (do
-        (log/spy :info query*)
-        (log/spy :info input)
-        (let [result (sql.query/eql-query env data-source query* input)]
-          (log/spy :info result)
+      (let [result (sql.query/eql-query env data-source query* input)]
           (if one?
             (first result)
-            result)))
+            result))
       (log/info "Unable to complete query."))))
 
 

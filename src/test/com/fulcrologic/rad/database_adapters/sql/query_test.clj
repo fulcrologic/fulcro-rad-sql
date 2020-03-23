@@ -12,6 +12,7 @@
 
 (def NESTED_QUERY
   [:account/id :account/name :account/active?
+   {:account/primary-address [:address/id :address/street]}
    {:account/addresses [:address/id
                         :address/street
                         :address/city]}])
@@ -90,8 +91,6 @@ SELECT
  accounts.\"name\",
  accounts.\"active\",
  array_agg(addresses.\"id\"),
- array_agg(addresses.\"street\"),
- array_agg(addresses.\"city\")
  FROM accounts
  LEFT JOIN addresses ON addresses.\"account_addresses_accounts_id\" = accounts.\"id\"
  WHERE accounts.\"id\" = ?

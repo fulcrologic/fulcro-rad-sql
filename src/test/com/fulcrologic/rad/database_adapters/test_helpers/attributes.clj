@@ -12,22 +12,24 @@
    ::rad.attr/schema    :production
    ::rad.sql/table      "accounts"})
 
-
 (defattr account-name :account/name :string
   {::rad.attr/schema     :production
    ::rad.attr/identities #{:account/id}})
 
-
 (defattr account-email :account/email :string
   {::rad.attr/schema     :production
    ::rad.attr/identities #{:account/id}})
-
 
 (defattr account-active? :account/active? :boolean
   {::rad.attr/schema     :production
    ::rad.attr/identities #{:account/id}
    ::rad.sql/column-name "active"})
 
+(defattr account-primary-address :account/primary-address :ref
+  {::rad.attr/cardinality :one
+   ::rad.attr/target      :address/id
+   ::rad.attr/schema      :production
+   ::rad.attr/identities  #{:account/id}})
 
 (defattr account-addresses :account/addresses :ref
   {::rad.attr/cardinality :many
@@ -37,15 +39,13 @@
    ;::rad.sql/join         ["addresses" "account_id"]
    })
 
-
 ;; Derived data
 (defattr account-locked? :account/locked? :boolean
   {})
 
 
 (def account-attributes
-  [account-id account-name account-email account-active? account-locked? account-addresses])
-
+  [account-id account-name account-email account-active? account-locked? account-primary-address account-addresses])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; User
