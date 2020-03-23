@@ -149,7 +149,6 @@
       opts)))
 
 
-(defn column-name [attr] (or (::rad.sql/column-name attr) (name (::rad.attr/qualified-key attr))))
 (defn q [v]
   (if (int? v)
     v
@@ -163,20 +162,21 @@
   (let [ast         (eql/query->ast eql-query)
         schema      (::rad.attr/schema id-attribute)
         id-key      (::rad.attr/qualified-key id-attribute)
-        table-name  (::rad.sql/table id-attribute)
+        table-name  (sql.schema/table-name id-attribute)
         where       (str " WHERE "
                       (if (map? where)
-                        (str (column-name id-attribute) " = " (q (get where id-key)))
-                        (str (column-name id-attribute) " IN (" (str/join "," (map (comp q id-key) where)) ")")))
+                        (str (sql.schema/column-name id-attribute) " = " (q (get where id-key)))
+                        (str (sql.schema/column-name id-attribute) " IN (" (str/join "," (map (comp q id-key) where)) ")")))
         columns     (into []
                       (comp
                         (map (comp key->attribute :dispatch-key))
                         (filter #(= schema (::rad.attr/schema %)))
-                        (map column-name))
+                        (map sql.schema/column-name))
                       (:children ast))
         sql         (str "SELECT " (str/join "," columns) " FROM " table-name where)
         ;; join "(SELECT ID FROM ADDRESS WHERE account_id = id) AS address_id"
         raw-results (query data-source [sql] env)]
+    (log/spy :info sql)
     ;; TASK: All you need for joins is something like {:account/addresses [{:address/id a} {:address/id b} ...]}
     (log/spy :debug raw-results)
     ;; TASK: general-purpose function that can take SQL result and rename keys properly.
