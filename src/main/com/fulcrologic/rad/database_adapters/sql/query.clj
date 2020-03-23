@@ -161,7 +161,7 @@
   of joined tables, but the maximum depth of these queries are 1."
   [{::rad.attr/keys [key->attribute id-attribute] :as env} data-source eql-query where]
   (let [ast         (eql/query->ast eql-query)
-        schema      (::rad.sql/schema id-attribute)
+        schema      (::rad.attr/schema id-attribute)
         id-key      (::rad.attr/qualified-key id-attribute)
         table-name  (::rad.sql/table id-attribute)
         where       (str " WHERE "
@@ -171,7 +171,7 @@
         columns     (into []
                       (comp
                         (map (comp key->attribute :dispatch-key))
-                        (filter #(= schema (::rad.sql/schema %)))
+                        (filter #(= schema (::rad.attr/schema %)))
                         (map column-name))
                       (:children ast))
         sql         (str "SELECT " (str/join "," columns) " FROM " table-name where)

@@ -20,7 +20,7 @@
 (defn entity-query
   "The entity query used by the pathom resolvers."
   [{::rad.attr/keys [id-attribute key->attribute] :as env} input]
-  (let [schema (::rad.sql/schema id-attribute)
+  (let [schema (::rad.attr/schema id-attribute)
         one?   (not (sequential? input))]
     (enc/if-let [data-source (get-in env [::rad.sql/connection-pools schema])
                  query*      (or
@@ -36,7 +36,7 @@
 (defn id-resolver [{::rad.attr/keys [id-attribute attributes k->attr]}]
   (enc/if-let [id-key  (::rad.attr/qualified-key id-attribute)
                outputs (rad.attr/attributes->eql attributes)
-               schema  (::rad.sql/schema id-attribute)]
+               schema  (::rad.attr/schema id-attribute)]
     {::pc/sym     (symbol
                     (str (namespace id-key))
                     (str (name id-key) "-resolver"))
@@ -47,7 +47,7 @@
                       (entity-query
                         (assoc env
                           ::rad.attr/id-attribute id-attribute
-                          ::rad.sql/schema schema
+                          ::rad.attr/schema schema
                           ::rad.sql/default-query outputs)
                         input)))
      ::pc/input   #{id-key}}
@@ -63,7 +63,7 @@
   (log/info "Generating resolvers for SQL schema" schema)
   (let [k->attr             (enc/keys-by ::rad.attr/qualified-key attributes)
         id-attr->attributes (->> attributes
-                              (filter #(= schema (::rad.sql/schema %)))
+                              (filter #(= schema (::rad.attr/schema %)))
                               (mapcat
                                 (fn [attribute]
                                   (for [entity-id (::rad.attr/identities attribute)]
@@ -103,11 +103,11 @@
                                      (not= (:before v) (:after v))))
                                  entity-diff)]
         :when (and table (seq persistent-attrs))]
-    {::rad.sql/table  table
-     ::rad.sql/schema (::rad.sql/schema attr)
-     :tx/action       :sql/update
-     :tx/attrs        (enc/map-vals :after entity-diff)
-     :tx/where        {id-k id}}))
+    {::rad.sql/table   table
+     ::rad.attr/schema (::rad.attr/schema attr)
+     :tx/action        :sql/update
+     :tx/attrs         (enc/map-vals :after entity-diff)
+     :tx/where         {id-k id}}))
 
 ;; TASK: Implement save logic (remember tempid remaps!)
 (defn save-form!
@@ -117,9 +117,9 @@
     ::rad.sql/keys  [connection-pools]
     :as             env} {::rad.form/keys [delta]}]
   (log/info "SQL Save of delta " (with-out-str (pprint delta)))
-  (doseq [{:tx/keys       [attrs where]
-           ::rad.sql/keys [schema table]
-           :as            tx} (delta->txs key->attribute delta)]
+  (doseq [{:tx/keys [attrs where]
+           :keys    [::rad.attr/schema ::rad.sql/table]
+           :as      tx} (delta->txs key->attribute delta)]
     (log/info "SQL steps: " (with-out-str (pprint tx)))
     (enc/if-let [schema-pool (get connection-pools schema)
                  db          (get-in env [::rad.sql/databases schema])]

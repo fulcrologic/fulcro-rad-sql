@@ -114,9 +114,9 @@
 (defmethod op->sql :column [key->attr {:keys [table column attr]}]
   (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table column (sql-type attr)))
 
-(defn attr->ops [schema-name key->attribute {::attr/keys    [qualified-key type identity? identities]
-                                             ::rad.sql/keys [schema]
-                                             :as            attr}]
+(defn attr->ops [schema-name key->attribute {::attr/keys [qualified-key type identity? identities]
+                                             :keys       [::attr/schema]
+                                             :as         attr}]
   (when (= schema schema-name)
     (enc/if-let [tables-and-columns (seq (sql.schema/tables-and-columns key->attribute attr))]
       (reduce

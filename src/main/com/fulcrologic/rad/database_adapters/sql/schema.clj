@@ -18,7 +18,7 @@
 
 (defn attr->table-name
   "DEPRECATED. use `table-name` on an id attr. This one cannot be correct, since an attr can be on more than one tbl"
-  ([k->attr {:keys [::rad.attr/identities ::rad.sql/table]}]
+  ([k->attr {:keys [::attr/identities ::rad.sql/table]}]
    (or table (get-in k->attr [(first identities) ::rad.sql/table]))))
 
 (defn column-name
