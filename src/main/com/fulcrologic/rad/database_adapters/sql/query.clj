@@ -137,14 +137,14 @@
   "Wraps next.jbdc's query, but will return fully qualified keywords
   for any matching attributes found in `::attr/attributes` in the
   options map."
-  [db stmt opts]
-  (jdbc.sql/query (:datasource db)
+  [data-source stmt opts]
+  (jdbc.sql/query data-source
     stmt
     (merge {:builder-fn sql.rs/as-qualified-maps
             :key-fn     (let [idx (sql.schema/attrs->sql-col-index
-                                    (::rad.attr/k->attr opts))]
+                                    (::rad.attr/key->attribute opts))]
                           (fn [table column]
-                            (get idx [table column]
+                            (get idx [(clojure.string/lower-case table) (clojure.string/lower-case column)]
                               (keyword table column))))}
       opts)))
 
@@ -159,8 +159,8 @@
   "Generates and executes a query based off off an EQL query by using
   the `::rad.attr/k->attr`. There is no restriction on the number
   of joined tables, but the maximum depth of these queries are 1."
-  [{::rad.attr/keys [key->attribute id-attribute] :as env} data-source query where]
-  (let [ast         (eql/query->ast query)
+  [{::rad.attr/keys [key->attribute id-attribute] :as env} data-source eql-query where]
+  (let [ast         (eql/query->ast eql-query)
         schema      (::rad.sql/schema id-attribute)
         id-key      (::rad.attr/qualified-key id-attribute)
         table-name  (::rad.sql/table id-attribute)
@@ -176,16 +176,13 @@
                       (:children ast))
         sql         (str "SELECT " (str/join "," columns) " FROM " table-name where)
         ;; join "(SELECT ID FROM ADDRESS WHERE account_id = id) AS address_id"
-        _           (log/spy :info sql)
-        raw-results (jdbc.sql/query data-source [sql])]
+        raw-results (query data-source [sql] env)]
     ;; TASK: All you need for joins is something like {:account/addresses [{:address/id a} {:address/id b} ...]}
     (log/spy :debug raw-results)
     ;; TASK: general-purpose function that can take SQL result and rename keys properly.
     ;; NOTE: When processing joins, that will be a nested rename. See fix-id-keys in datomic.clj
-    (mapv #(set/rename-keys % {:ACCOUNT/ID     :account/id
-                               :ACCOUNT/NAME   :account/name
-                               :ACCOUNT/ACTIVE :account/active?}) raw-results))
-  #_(let [plan   (query->plan query where env)
+    raw-results)
+  #_(let [plan   (query->plan eql-query where env)
           stmt   (plan->sql plan)
           opts   (assoc env
                    :builder-fn sql.rs/as-maps-with-keys

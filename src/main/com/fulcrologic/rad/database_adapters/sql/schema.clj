@@ -13,8 +13,8 @@
   tables)
 
 (defn attr->table-name
-  ([k->attr {:keys [::rad.sql/entity-ids ::rad.sql/table]}]
-   (or table (get-in k->attr [(first entity-ids) ::rad.sql/table]))))
+  ([k->attr {:keys [::rad.attr/identities ::rad.sql/table]}]
+   (or table (get-in k->attr [(first identities) ::rad.sql/table]))))
 
 (defn attr->column-name [{::rad.attr/keys [qualified-key]
                           ::rad.sql/keys  [column-name]}]
