@@ -8,7 +8,8 @@
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
-    [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema])
+    [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
+    [clojure.spec.alpha :as s])
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariDataSource)))
 
@@ -18,7 +19,8 @@
    :boolean  "BOOLEAN"
    :int      "INTEGER"
    :long     "BIGINT"
-   :money    "decimal(20,2)"
+   :decimal  "decimal(20,2)"
+   :instant  "TIMESTAMP WITH TIME ZONE"
    :inst     "BIGINT"
    :keyword  "CHAR(200)"
    :symbol   "CHAR(200)"
@@ -112,7 +114,15 @@
         index-name table column))))
 
 (defmethod op->sql :column [key->attr {:keys [table column attr]}]
-  (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table column (sql-type attr)))
+  (let [{::attr/keys [type enumerated-values]} attr]
+    (if (= :enum type)
+      (let [enums (str/join "," (map #(str "'" % "'") enumerated-values))]
+        (if (seq enumerated-values)
+          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s ENUM(%s);\n" table column enums)
+          (do
+            (log/error "Enumeration is missing `::attr/enumerated-values`. Cannot create column in database.")
+            "")))
+      (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table column (sql-type attr)))))
 
 (defn attr->ops [schema-name key->attribute {::attr/keys [qualified-key type identity? identities]
                                              :keys       [::attr/schema]
@@ -134,9 +144,10 @@
         (when (nil? (sql-type attr))
           (str " (No mapping for type " type ")"))))))
 
-(defn automatic-schema
+(>defn automatic-schema
   "Returns SQL schema for all attributes that support it."
   [schema-name attributes]
+  [keyword? ::attr/attributes => (s/coll-of string?)]
   (let [key->attribute (attr/attribute-map attributes)
         db-ops         (mapcat (partial attr->ops schema-name key->attribute) attributes)
         {:keys [id table column ref]} (group-by :type db-ops)
@@ -145,10 +156,7 @@
         new-ids        (mapv op (set id))
         new-columns    (mapv op (set column))
         new-refs       (mapv op (set ref))]
-    (str
-      "BEGIN;\n"
-      (str/join "\n" (concat new-tables new-ids new-columns new-refs))
-      "COMMIT;\n")))
+    (vec (concat new-tables new-ids new-columns new-refs))))
 
 (defn migrate! [config all-attributes connection-pools]
   (let [database-map (some-> config ::rad.sql/databases)]
@@ -170,7 +178,12 @@
                 (.migrate flyway)))
 
             auto-create-missing?
-            (do
+            (let [stmts (automatic-schema schema all-attributes)]
               (log/info "Automatically trying to create SQL schema from attributes.")
-              (jdbc/execute! (:datasource db) (automatic-schema schema all-attributes))))
+              (doseq [s stmts]
+                (try
+                  (jdbc/execute! pool [s])
+                  (catch Exception e
+                    (log/error e s)
+                    (throw e))))))
           (log/error (str "No pool for " dbkey ". Skipping migrations.")))))))
