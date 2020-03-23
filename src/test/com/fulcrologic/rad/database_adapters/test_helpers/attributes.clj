@@ -34,7 +34,7 @@
    ::rad.attr/target      :address/id
    ::rad.attr/schema      :production
    ::rad.attr/identities  #{:account/id}                    ;; Should always be one.
-   ::rad.sql/join         ["addresses" "account_id"]
+   ;::rad.sql/join         ["addresses" "account_id"]
    })
 
 

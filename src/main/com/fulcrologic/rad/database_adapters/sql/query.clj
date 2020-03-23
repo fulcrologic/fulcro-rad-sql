@@ -25,38 +25,52 @@
 (defn query->plan
   "Given an EQL query, plans a sql query that would fetch the entities
   and their joins"
-  [query where {:keys [::rad.attr/k->attr ::rad.sql/id-attribute]}]
+  [query where {:keys [::rad.attr/key->attribute ::rad.attr/id-attribute]}]
   (let [{:keys [prop join]} (group-by :type (:children (eql/query->ast query)))
-        table (::rad.sql/table id-attribute)
+        table (sql.schema/table-name id-attribute)
         ->fields
               (fn [{:keys [nodes id-attr parent-attr]}]
                 (for [node nodes
                       :let [k    (:dispatch-key node)
-                            attr (k->attr k)]]
+                            attr (key->attribute k)]]
                   {::rad.attr/qualified-key k
                    ::rad.attr/cardinality   (::rad.attr/cardinality parent-attr)
-                   ::rad.sql/table          (::rad.sql/table id-attr)
+                   ::rad.sql/table          (sql.schema/table-name id-attr)
                    ::rad.sql/column         (sql.schema/column-name attr)
                    ::parent-key             (::rad.attr/qualified-key parent-attr)}))]
-    {::fields (apply concat
-                (->fields {:nodes prop :id-attr id-attribute})
-                (for [node join]
-                  (enc/if-let [parent-attr (-> node :dispatch-key k->attr)
-                               target-attr (-> parent-attr ::rad.attr/target k->attr)]
-                    (->fields {:nodes       (:children node)
-                               :id-attr     target-attr
-                               :parent-attr parent-attr})
-                    (throw (ex-info "Invalid target for join"
-                             {:key (:dispatch-key node)})))))
+    {::fields (vec (apply concat
+                     (->fields {:nodes prop :id-attr id-attribute})
+                     (for [node join]
+                       (enc/if-let [parent-attr (-> node :dispatch-key key->attribute)
+                                    target-attr (-> parent-attr ::rad.attr/target key->attribute)]
+                         (->fields {:nodes       (:children node)
+                                    :id-attr     target-attr
+                                    :parent-attr parent-attr})
+                         (throw (ex-info "Invalid target for join"
+                                  {:key (:dispatch-key node)}))))))
      ::from   table
+
      ::joins  (for [node join
-                    :let [attr (k->attr (:dispatch-key node))]]
-                [(::rad.sql/join attr)
-                 [table (sql.schema/column-name id-attribute)]])
+                    :let [{::rad.attr/keys [target cardinality identities] :as attr} (key->attribute (:dispatch-key node))
+                          column-name (sql.schema/column-name attr)]]
+                (if (= :one cardinality)
+                  [table column-name]
+                  (let [reverse-target-attr (key->attribute (first identities))
+                        rev-target-table    (sql.schema/table-name reverse-target-attr)
+                        rev-target-column   (sql.schema/column-name reverse-target-attr)
+                        origin-table        (sql.schema/table-name attr)
+                        origin-column       (sql.schema/column-name attr)
+                        table               (sql.schema/table-name (key->attribute target))
+                        column              (or
+                                              (::rad.sql/column-name attr)
+                                              ;; account_addresses_account_id
+                                              (str/join "_" [origin-table origin-column rev-target-table rev-target-column]))]
+                    [[table column]
+                     [rev-target-table rev-target-column]])))
      ::where  (enc/map-keys
                 ;; TODO table may be incorrect
                 #(format "%s.\"%s\"" table
-                   (sql.schema/column-name (k->attr %)))
+                   (sql.schema/column-name (key->attribute %)))
                 where)
      ::group  (when (seq join)
                 [[table (sql.schema/column-name id-attribute)]])}))
@@ -73,10 +87,14 @@
                                         (field-name table column))
                                       (field-name table column))))
         join-sql   (str/join " "
-                     (for [[[ltable lcolumn] [rtable rcolumn]] joins]
-                       (str "LEFT JOIN " ltable " ON "
-                         (field-name ltable lcolumn) " = "
-                         (field-name rtable rcolumn))))
+                     (map
+                       (fn [join]
+                         (if (every? vector? join)
+                           (let [[[ltable lcolumn] [rtable rcolumn]] join]
+                             (str "LEFT JOIN " ltable " ON "
+                               (field-name ltable lcolumn) " = "
+                               (field-name rtable rcolumn)))))
+                       joins))
         where-stmt (if (seq where)
                      (jdbc.builder/by-keys where :where {})
                      [""])
@@ -156,39 +174,17 @@
 
 (defn eql-query
   "Generates and executes a query based off off an EQL query by using
-  the `::rad.attr/k->attr`. There is no restriction on the number
+  the `::rad.attr/key->attribute`. There is no restriction on the number
   of joined tables, but the maximum depth of these queries are 1."
   [{::rad.attr/keys [key->attribute id-attribute] :as env} data-source eql-query where]
-  (let [ast         (eql/query->ast eql-query)
-        schema      (::rad.attr/schema id-attribute)
-        id-key      (::rad.attr/qualified-key id-attribute)
-        table-name  (sql.schema/table-name id-attribute)
-        where       (str " WHERE "
-                      (if (map? where)
-                        (str (sql.schema/column-name id-attribute) " = " (q (get where id-key)))
-                        (str (sql.schema/column-name id-attribute) " IN (" (str/join "," (map (comp q id-key) where)) ")")))
-        columns     (into []
-                      (comp
-                        (map (comp key->attribute :dispatch-key))
-                        (filter #(= schema (::rad.attr/schema %)))
-                        (map sql.schema/column-name))
-                      (:children ast))
-        sql         (str "SELECT " (str/join "," columns) " FROM " table-name where)
-        ;; join "(SELECT ID FROM ADDRESS WHERE account_id = id) AS address_id"
-        raw-results (query data-source [sql] env)]
-    (log/spy :info sql)
-    ;; TASK: All you need for joins is something like {:account/addresses [{:address/id a} {:address/id b} ...]}
-    (log/spy :debug raw-results)
-    ;; TASK: general-purpose function that can take SQL result and rename keys properly.
-    ;; NOTE: When processing joins, that will be a nested rename. See fix-id-keys in datomic.clj
-    raw-results)
-  #_(let [plan   (query->plan eql-query where env)
-          stmt   (plan->sql plan)
-          opts   (assoc env
-                   :builder-fn sql.rs/as-maps-with-keys
-                   :keys (map ::rad.attr/qualified-key (::fields plan)))
-          result (jdbc.sql/query (:datasource db) stmt opts)]
-      (with-meta
+  (let [plan   (log/spy :info (query->plan eql-query where env))
+        stmt   (log/spy :info (plan->sql plan))
+        opts   (assoc env
+                 :builder-fn sql.rs/as-maps-with-keys
+                 :keys (map ::rad.attr/qualified-key (::fields plan)))
+        result nil #_(jdbc.sql/query data-source stmt opts)]
+    result
+    #_(with-meta
         (parse-executed-plan plan result)
         {::sql  (first stmt)
          ::plan plan})))

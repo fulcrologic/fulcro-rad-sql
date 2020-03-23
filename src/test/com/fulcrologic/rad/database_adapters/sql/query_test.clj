@@ -1,11 +1,11 @@
 (ns com.fulcrologic.rad.database-adapters.sql.query-test
   (:require
-    [com.fulcrologic.rad.attributes                                :as rad.attr]
-    [com.fulcrologic.rad.database-adapters.sql                     :as rad.sql]
-    [com.fulcrologic.rad.database-adapters.sql.query               :as sql.query]
+    [com.fulcrologic.rad.attributes :as rad.attr]
+    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
     [com.fulcrologic.rad.database-adapters.test-helpers.attributes :as attrs]
-    [clojure.string                                                :as str]
-    [taoensso.encore                                               :as enc]
+    [clojure.string :as str]
+    [taoensso.encore :as enc]
     [fulcro-spec.core :refer [specification component assertions]]))
 
 (def SIMPLE_QUERY [:account/id :account/name :account/active?])
@@ -16,19 +16,19 @@
                         :address/street
                         :address/city]}])
 
-(specification "query->plan"
-  (let [params {::rad.sql/id-attribute attrs/account-id
-                ::rad.attr/k->attr     (enc/keys-by ::rad.attr/qualified-key
-                                         attrs/all-attributes)}
+(specification "query->plan" :focus
+  (let [params   {::rad.attr/id-attribute   attrs/account-id
+                  ::rad.attr/key->attribute (enc/keys-by ::rad.attr/qualified-key
+                                              attrs/all-attributes)}
         simplify (juxt ::rad.attr/qualified-key ::rad.sql/table ::rad.sql/column)]
 
     (component "Top level query"
-      (let [result   (sql.query/query->plan SIMPLE_QUERY {} params)]
+      (let [result (sql.query/query->plan SIMPLE_QUERY {} params)]
         (assertions
           "selects the requested fields"
           (map simplify (::sql.query/fields result))
-          => [[:account/id      "accounts" "id"]
-              [:account/name    "accounts" "name"]
+          => [[:account/id "accounts" "id"]
+              [:account/name "accounts" "name"]
               [:account/active? "accounts" "active"]]
 
           "uses the requested table"
@@ -40,14 +40,14 @@
           => nil)))
 
     (component "Nested query"
-      (let [result (sql.query/query->plan NESTED_QUERY {} params)
+      (let [result        (sql.query/query->plan NESTED_QUERY {} params)
             joined-fields (drop 3 (::sql.query/fields result))]
         (assertions
           "Selects nested fields"
           (map simplify joined-fields)
-          => [[:address/id     "addresses" "id"]
+          => [[:address/id "addresses" "id"]
               [:address/street "addresses" "street"]
-              [:address/city   "addresses" "city"]]
+              [:address/city "addresses" "city"]]
 
           "Keeps the parent-key"
           (map ::sql.query/parent-key joined-fields)
@@ -59,7 +59,7 @@
 
           "Joins to the nested table"
           (first (::sql.query/joins result))
-          => [["addresses" "account_id"] ["accounts" "id"]]
+          => [["addresses" "account_addresses_accounts_id"] ["accounts" "id"]]
 
           "Groups by parent's PK"
           (::sql.query/group result)
@@ -77,7 +77,7 @@ SELECT
  array_agg(addresses.\"street\"),
  array_agg(addresses.\"city\")
  FROM accounts
- LEFT JOIN addresses ON addresses.\"account_id\" = accounts.\"id\"
+ LEFT JOIN addresses ON addresses.\"account_addresses_accounts_id\" = accounts.\"id\"
   GROUP BY accounts.\"id\"
 " #"\n" ""))
 
@@ -93,16 +93,16 @@ SELECT
  array_agg(addresses.\"street\"),
  array_agg(addresses.\"city\")
  FROM accounts
- LEFT JOIN addresses ON addresses.\"account_id\" = accounts.\"id\"
+ LEFT JOIN addresses ON addresses.\"account_addresses_accounts_id\" = accounts.\"id\"
  WHERE accounts.\"id\" = ?
  GROUP BY accounts.\"id\"
 " #"\n" ""))
 
 
 (specification "plan>sql"
-  (let [params     {::rad.sql/id-attribute attrs/account-id
-                    ::rad.attr/k->attr     (enc/keys-by ::rad.attr/qualified-key
-                                             attrs/all-attributes)}
+  (let [params     {::rad.attr/id-attribute   attrs/account-id
+                    ::rad.attr/key->attribute (enc/keys-by ::rad.attr/qualified-key
+                                                attrs/all-attributes)}
         plan       (sql.query/query->plan NESTED_QUERY {} params)
         plan-where (sql.query/query->plan NESTED_QUERY {:account/id 12} params)]
 
