@@ -68,11 +68,11 @@
         (when (not= 1 (count identities))
           (throw (ex-info "Reference column must have exactly 1 ::attr/identities entry." {:k qualified-key})))
         (enc/if-let [reverse-target-attr (k->attr (first identities))
-                     rev-target-table    (sql.schema/table-name reverse-target-attr)
+                     rev-target-table    (sql.schema/table-name k->attr reverse-target-attr)
                      rev-target-column   (sql.schema/column-name reverse-target-attr)
-                     origin-table        (sql.schema/table-name attr)
+                     origin-table        (sql.schema/table-name k->attr attr)
                      origin-column       (sql.schema/column-name attr)
-                     table               (sql.schema/table-name target-attr)
+                     table               (sql.schema/table-name k->attr target-attr)
                      column              (or
                                            (::rad.sql/column-name attr)
                                            ;; account_addresses_account_id
@@ -84,9 +84,9 @@
             (format "CREATE INDEX IF NOT EXISTS %s ON %s(%s);\n"
               index-name table column))
           (throw (ex-info "Cannot create to-many reference column." {:k qualified-key}))))
-      (enc/if-let [origin-table  (sql.schema/table-name attr)
+      (enc/if-let [origin-table  (sql.schema/table-name k->attr attr)
                    origin-column (sql.schema/column-name attr)
-                   target-table  (sql.schema/table-name target-attr)
+                   target-table  (sql.schema/table-name k->attr target-attr)
                    target-column (sql.schema/column-name target-attr)
                    target-type   (sql-type target-attr)
                    index-name    (str column "_idx")]

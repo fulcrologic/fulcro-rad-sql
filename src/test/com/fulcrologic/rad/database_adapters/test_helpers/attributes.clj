@@ -52,14 +52,13 @@
 
 
 (defattr user-id :user/id :uuid
-  {::rad.attr/schema :production
-   ::rad.sql/table   "users"})
-
+  {::rad.attr/schema    :production
+   ::rad.attr/identity? true
+   ::rad.sql/table      "users"})
 
 (defattr user-name :user/name :string
   {::rad.attr/schema     :production
    ::rad.attr/identities #{:user/id}})
-
 
 (def user-attributes [user-id user-name])
 

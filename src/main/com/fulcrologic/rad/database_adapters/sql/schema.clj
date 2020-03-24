@@ -3,7 +3,7 @@
   attributes and their corresponding table / columns in the database."
   (:require
     [camel-snake-kebab.core :as csk]
-    [com.fulcrologic.guardrails.core :refer [>defn =>]]
+    [com.fulcrologic.guardrails.core :refer [>defn => |]]
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [taoensso.timbre :as log]
@@ -11,9 +11,21 @@
 
 (>defn table-name
   "Get the table name for a given identity key"
-  ([{::attr/keys    [qualified-key]
-     ::rad.sql/keys [table] :as id-attribute}]
+  ([key->attribute {::attr/keys    [identity? identities]
+                    ::rad.sql/keys [table] :as attr}]
+   [map? ::attr/attribute => string?]
+   (if identity?
+     (table-name attr)
+     (let [identity (first identities)
+           id-attr  (key->attribute identity)]
+       (when-not (= 1 (count identities))
+         (throw (ex-info "Cannot derive table name from ::attr/identities because there is more than one." {})))
+       (table-name id-attr))))
+  ([{::attr/keys    [identity? qualified-key]
+     ::rad.sql/keys [table]}]
    [::attr/attribute => string?]
+   (when-not identity?
+     (throw (ex-info "You must use an id-attribute with table-name" {:non-id-key qualified-key})))
    (or table (some-> qualified-key namespace csk/->snake_case))))
 
 (defn attr->table-name
