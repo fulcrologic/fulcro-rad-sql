@@ -52,3 +52,17 @@
          :account/active?         {:before true :after false}
          :account/primary-address {:before 3 :after 4}})
       => "UPDATE accounts SET name = 'sam',active = false WHERE id = 1")))
+
+(specification "to-one-ref-update"
+  (let [tempid (tempid/tempid)]
+    (assertions
+      "updates to-one column to correct new values"
+      (res/to-one-ref-update
+        {::attr/key->attribute key->attribute}
+        attrs/account-id
+        {tempid 42}
+        tempid
+        attrs/account-primary-address
+        nil
+        [:address/id 5])
+      => "UPDATE accounts SET primary_address = 5 WHERE id = 42")))

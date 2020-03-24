@@ -181,6 +181,49 @@
   (let [stmts (keep (fn [[ident diff]] (scalar-update env ident diff)) delta)]
     stmts))
 
+(defn- ref-one-attr
+  [k->a k]
+  (let [{::attr/keys [type cardinality] :as attr} (k->a k)]
+    (when (and (= :ref type) (not= cardinality :many))
+      attr)))
+
+(defn- ref-many-attr
+  [k->a k]
+  (let [{::attr/keys [type cardinality] :as attr} (k->a k)]
+    (when (and (= :ref type) (= cardinality :many))
+      attr)))
+
+(defn to-one-ref-update [{::attr/keys [key->attribute] :as env} id-attr tempids row-id attr old-val [_ new-id :as new-val]]
+  (let
+    [table-name     (sql.schema/table-name key->attribute id-attr)
+     id-column-name (sql.schema/column-name id-attr)
+     target-id      (get tempids row-id row-id)]
+    (cond
+      new-id
+      (format "UPDATE %s SET %s = %s WHERE %s = %s"
+        table-name (sql.schema/column-name attr) (sql.query/q new-id) id-column-name target-id)
+
+      old-val
+      (format "UPDATE %s SET %s = NULL WHERE %s = %s"
+        table-name (sql.schema/column-name attr) id-column-name target-id))))
+
+(defn to-many-ref-update [])
+
+(defn ref-updates [{::attr/keys [key->attribute] :as env} tempids [table id :as ident] diff]
+  (let [id-attr           (key->attribute table)
+        to-one-ref-attrs  (keep (fn [k] (ref-one-attr key->attribute k)) (keys diff))
+        to-many-ref-attrs (keep (fn [k] (ref-many-attr key->attribute k)) (keys diff))
+        old-val           (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :before]))
+        new-val           (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :after]))]
+    (concat
+      (keep (fn [a] (to-one-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-one-ref-attrs)
+      ;; (keep (fn [a] (to-many-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-many-ref-attrs)
+      )))
+
+(defn delta->ref-updates [env tempids schema delta]
+  (let [stmts (mapcat (fn [[ident diff]] (ref-updates env tempids ident diff)) delta)]
+    stmts))
+
 (defn save-form!
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"
@@ -194,9 +237,10 @@
     ;; TASK: Transaction should be opened on all databases at once, so that they all succeed or fail
     (doseq [schema (keys connection-pools)]
       (let [ds             (get connection-pools schema)
+            ;; TASK: None of these are filtering by schema, though they have it as an arg
             {:keys [tempids insert-scalars]} (delta->scalar-inserts env schema delta) ; any non-fk column with a tempid
             update-scalars (delta->scalar-updates env schema delta) ; any non-fk columns on entries with pre-existing id
-            update-refs    [] #_(delta->ref-updates env tempids schema delta) ; all fk columns on entire delta
+            update-refs    (delta->ref-updates env tempids schema delta) ; all fk columns on entire delta
             steps          (concat insert-scalars update-scalars update-refs)]
         (jdbc/with-transaction [ds ds {:isolation :serializable}]
           (doseq [sql steps]
