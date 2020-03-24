@@ -150,14 +150,37 @@
     {:tempids        tempids
      :insert-scalars stmts}))
 
-(defn delta->scalar-updates [{::attr/keys [key->attribute]
-                              ::rsql/keys [connection-pools]
-                              :as         env} schema delta]
-  (let [ds      (get connection-pools schema)
-        tempids (generate-tempids ds key->attribute delta)
-        stmts   (keep (fn [[ident diff]] (scalar-insert env tempids ident diff)) delta)]
-    {:tempids        tempids
-     :insert-scalars stmts}))
+(defn scalar-update
+  [{::attr/keys [key->attribute] :as env} [table id :as ident] diff]
+  (when-not (tempid/tempid? id)
+    (let [{::attr/keys [type] :as id-attr} (key->attribute table)
+          table-name   (sql.schema/table-name key->attribute id-attr)
+          scalar-attrs (keep
+                         (fn [k] (table-local-attr key->attribute k))
+                         (keys diff))
+          old-val      (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :before]))
+          new-val      (fn [{::attr/keys [qualified-key]}] (let [v (get-in diff [qualified-key :after])]
+                                                             (when-not (nil? v)
+                                                               (sql.query/q v))))
+          column-sets  (str/join "," (keep
+                                       (fn [attr]
+                                         (let [new      (new-val attr)
+                                               col-name (sql.schema/column-name attr)
+                                               old      (old-val attr)]
+                                           (cond
+                                             (and old (nil? new))
+                                             (str col-name " = NULL")
+
+                                             (not (nil? new))
+                                             (str col-name " = " new))))
+                                       scalar-attrs))]
+      (format "UPDATE %s SET %s WHERE %s = %s" table-name column-sets
+        (sql.schema/column-name id-attr) (sql.query/q id)))))
+
+(defn delta->scalar-updates [env schema delta]
+  (let [stmts (keep (fn [[ident diff]] (scalar-update env ident diff)) delta)]
+    stmts))
+
 (defn save-form!
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"

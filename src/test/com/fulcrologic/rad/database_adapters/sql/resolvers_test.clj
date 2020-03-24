@@ -31,3 +31,24 @@
            :account/active?         {:before true :after false}
            :account/primary-address {:before 3 :after 4}}))
       => true)))
+
+(specification "scalar-update"
+  (let [tempid (tempid/tempid)]
+    (assertions
+      "ignores new rows"
+      (nil?
+        (res/scalar-update {::attr/key->attribute key->attribute} [:account/id tempid]
+          {:account/name            {:before "joe" :after "sam"}
+           :account/addresses       {:before [[:address/id 5] [:address/id 6]]
+                                     :after  [[:address/id 22]]}
+           :account/active?         {:before true :after false}
+           :account/primary-address {:before 3 :after 4}}))
+      => true
+      "updates changed scalars to correct new values"
+      (res/scalar-update {::attr/key->attribute key->attribute} [:account/id 1]
+        {:account/name            {:before "joe" :after "sam"}
+         :account/addresses       {:before [[:address/id 5] [:address/id 6]]
+                                   :after  [[:address/id 22]]}
+         :account/active?         {:before true :after false}
+         :account/primary-address {:before 3 :after 4}})
+      => "UPDATE accounts SET name = 'sam',active = false WHERE id = 1")))
