@@ -65,4 +65,58 @@
         attrs/account-primary-address
         nil
         [:address/id 5])
-      => "UPDATE accounts SET primary_address = 5 WHERE id = 42")))
+      => "UPDATE accounts SET primary_address = 5 WHERE id = 42"
+      "Sets the column to NULL when removed"
+      (res/to-one-ref-update
+        {::attr/key->attribute key->attribute}
+        attrs/account-id
+        {}
+        42
+        attrs/account-primary-address
+        [:address/id 5]
+        nil)
+      => "UPDATE accounts SET primary_address = NULL WHERE id = 42"
+      "Deletes the referent row when removed if that option is set"
+      (res/to-one-ref-update
+        {::attr/key->attribute key->attribute}
+        attrs/account-id
+        {}
+        42
+        (assoc attrs/account-primary-address ::rsql/delete-referent? true)
+        [:address/id 5]
+        nil)
+      => "DELETE FROM addresses WHERE id = 5")))
+
+(specification "to-many-ref-update"
+  (let [tempid (tempid/tempid)]
+    (assertions
+      "updates to-one column to correct new values"
+      (res/to-many-ref-update
+        {::attr/key->attribute key->attribute}
+        attrs/account-id
+        {tempid 42}
+        tempid
+        attrs/account-addresses
+        nil
+        [[:address/id 5]])
+      => ["UPDATE addresses SET accounts_addresses_accounts_id = 42 WHERE id = 5"]
+      "Sets the column to NULL when removed"
+      (res/to-many-ref-update
+        {::attr/key->attribute key->attribute}
+        attrs/account-id
+        {}
+        42
+        attrs/account-addresses
+        [[:address/id 5]]
+        nil)
+      => ["UPDATE addresses SET accounts_addresses_accounts_id = NULL WHERE id = 5"]
+      "Deletes the referent row when removed if that option is set"
+      (res/to-many-ref-update
+        {::attr/key->attribute key->attribute}
+        attrs/account-id
+        {}
+        42
+        (assoc attrs/account-addresses ::rsql/delete-referent? true)
+        [[:address/id 5]]
+        nil)
+      => ["DELETE FROM addresses WHERE id = 5"])))

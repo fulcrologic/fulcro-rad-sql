@@ -7,7 +7,9 @@
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [taoensso.timbre :as log]
-    [clojure.spec.alpha :as s]))
+    [clojure.spec.alpha :as s]
+    [clojure.string :as str]
+    [taoensso.encore :as enc]))
 
 (>defn table-name
   "Get the table name for a given identity key"
@@ -33,13 +35,32 @@
   ([k->attr {:keys [::attr/identities ::rad.sql/table]}]
    (or table (get-in k->attr [(first identities) ::rad.sql/table]))))
 
+
+
 (defn column-name
   "Get the column name for the given attribute."
-  [{::attr/keys    [qualified-key]
-    ::rad.sql/keys [column-name]}]
-  (or
-    column-name
-    (some-> qualified-key name csk/->snake_case)))
+  ([k->attr {::attr/keys [identities cardinality type] :as attr}]
+   (or
+     (::rad.sql/column-name attr)
+     (if (and (= :many cardinality) (= :ref type))
+       (do
+         (when-not (= 1 (count identities))
+           (throw (ex-info "Cannot calculating column name that has multiple identities." {:attr attr})))
+         (enc/if-let [reverse-target-attr (k->attr (first identities))
+                      rev-target-table    (table-name k->attr reverse-target-attr)
+                      rev-target-column   (column-name reverse-target-attr)
+                      origin-table        (table-name k->attr attr)
+                      origin-column       (some-> attr ::attr/qualified-key name csk/->snake_case)]
+           ;; account_addresses_account_id
+           (str/join "_" [origin-table origin-column rev-target-table rev-target-column])))
+       (column-name attr))))
+  ([{::attr/keys    [qualified-key cardinality type]
+     ::rad.sql/keys [column-name]}]
+   (when (and (= :many cardinality) (= :ref type))
+     (throw (ex-info "Cannot calculate column name for to-many ref without k->attr." {:attr qualified-key})))
+   (or
+     column-name
+     (some-> qualified-key name csk/->snake_case))))
 
 (defn sequence-name [id-attribute]
   (str (table-name id-attribute) "_" (column-name id-attribute) "_seq"))
@@ -50,7 +71,7 @@
   "Return a sequence of [table-name column-name] that the given attribute appears at."
   [key->attribute {::attr/keys [identity? identities] :as attribute}]
   [(s/map-of qualified-keyword? ::attr/attribute) ::attr/attribute => (s/coll-of (s/tuple string? string?))]
-  (let [col-name (column-name attribute)]
+  (let [col-name (column-name key->attribute attribute)]
     (if identity?
       [[(table-name attribute) col-name]]
       (mapv

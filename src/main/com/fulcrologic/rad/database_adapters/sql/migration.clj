@@ -70,13 +70,8 @@
         (enc/if-let [reverse-target-attr (k->attr (first identities))
                      rev-target-table    (sql.schema/table-name k->attr reverse-target-attr)
                      rev-target-column   (sql.schema/column-name reverse-target-attr)
-                     origin-table        (sql.schema/table-name k->attr attr)
-                     origin-column       (sql.schema/column-name attr)
                      table               (sql.schema/table-name k->attr target-attr)
-                     column              (or
-                                           (::rad.sql/column-name attr)
-                                           ;; account_addresses_account_id
-                                           (str/join "_" [origin-table origin-column rev-target-table rev-target-column]))
+                     column              (sql.schema/column-name k->attr attr)
                      index-name          (str column "_idx")]
           (str
             (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s);\n"

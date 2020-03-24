@@ -16,7 +16,8 @@
     [next.jdbc :as jdbc]
     [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.rad.ids :as ids]
-    [clojure.string :as str]))
+    [clojure.string :as str]
+    [clojure.set :as set]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Reads
@@ -174,8 +175,8 @@
                                              (not (nil? new))
                                              (str col-name " = " new))))
                                        scalar-attrs))]
-      (format "UPDATE %s SET %s WHERE %s = %s" table-name column-sets
-        (sql.schema/column-name id-attr) (sql.query/q id)))))
+      (when (seq column-sets) (format "UPDATE %s SET %s WHERE %s = %s" table-name column-sets
+                                (sql.schema/column-name id-attr) (sql.query/q id))))))
 
 (defn delta->scalar-updates [env schema delta]
   (let [stmts (keep (fn [[ident diff]] (scalar-update env ident diff)) delta)]
@@ -194,21 +195,51 @@
       attr)))
 
 (defn to-one-ref-update [{::attr/keys [key->attribute] :as env} id-attr tempids row-id attr old-val [_ new-id :as new-val]]
-  (let
-    [table-name     (sql.schema/table-name key->attribute id-attr)
-     id-column-name (sql.schema/column-name id-attr)
-     target-id      (get tempids row-id row-id)
-     new-id         (get tempids new-id new-id)]
+  (let [table-name     (sql.schema/table-name key->attribute id-attr)
+        {delete-on-remove? ::rsql/delete-referent?} attr
+        id-column-name (sql.schema/column-name id-attr)
+        target-id      (get tempids row-id row-id)
+        new-id         (get tempids new-id new-id)]
     (cond
       new-id
       (format "UPDATE %s SET %s = %s WHERE %s = %s"
         table-name (sql.schema/column-name attr) (sql.query/q new-id) id-column-name target-id)
 
       old-val
-      (format "UPDATE %s SET %s = NULL WHERE %s = %s"
-        table-name (sql.schema/column-name attr) id-column-name target-id))))
+      (if delete-on-remove?
+        (let [foreign-table-id-key  (first old-val)
+              old-id                (second old-val)
+              foreign-table-id-attr (key->attribute foreign-table-id-key)
+              foreign-table-name    (sql.schema/table-name key->attribute foreign-table-id-attr)
+              foreign-id-column     (sql.schema/column-name key->attribute foreign-table-id-attr)]
+          (format "DELETE FROM %s WHERE %s = %s" foreign-table-name foreign-id-column (sql.query/q old-id)))
+        (format "UPDATE %s SET %s = NULL WHERE %s = %s"
+          table-name (sql.schema/column-name attr) id-column-name target-id)))))
 
-(defn to-many-ref-update [])
+(defn to-many-ref-update [{::attr/keys [key->attribute] :as env} target-row-id-attr tempids target-id to-many-attr old-val new-val]
+  (when-let [table-key (and (not= old-val new-val) (ffirst (concat old-val new-val)))]
+    (let [{delete-on-remove? ::rsql/delete-referent?} to-many-attr
+          target-id       (get tempids target-id target-id)
+          foreign-id-attr (key->attribute table-key)
+          foreign-table   (sql.schema/table-name key->attribute foreign-id-attr)
+          foreign-column  (sql.schema/column-name foreign-id-attr)
+          column-name     (sql.schema/column-name key->attribute to-many-attr)
+          old-ids         (into #{} (map (fn [[_ id]] (get tempids id id))) old-val)
+          new-ids         (into #{} (map (fn [[_ id]] (get tempids id id))) new-val)
+          adds            (set/difference new-ids old-ids)
+          removes         (set/difference old-ids new-ids)
+          add-stmts       (map (fn [id]
+                                 (format "UPDATE %s SET %s = %s WHERE %s = %s"
+                                   foreign-table column-name (sql.query/q target-id) foreign-column
+                                   (sql.query/q id))) adds)
+          remove-stmts    (map (fn [id]
+                                 (if delete-on-remove?
+                                   (format "DELETE FROM %s WHERE %s = %s"
+                                     foreign-table foreign-column (sql.query/q id))
+                                   (format "UPDATE %s SET %s = NULL WHERE %s = %s"
+                                     foreign-table column-name foreign-column (sql.query/q id))))
+                            removes)]
+      (concat add-stmts remove-stmts))))
 
 (defn ref-updates [{::attr/keys [key->attribute] :as env} tempids [table id :as ident] diff]
   (let [id-attr           (key->attribute table)
@@ -218,9 +249,7 @@
         new-val           (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :after]))]
     (concat
       (keep (fn [a] (to-one-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-one-ref-attrs)
-      ;; TASK: Add to-many ref saves. These will be like to-one, and will assume tempids are already inserted
-      ;; (keep (fn [a] (to-many-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-many-ref-attrs)
-      )))
+      (mapcat (fn [a] (to-many-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-many-ref-attrs))))
 
 (defn delta->ref-updates [env tempids schema delta]
   (let [stmts (mapcat (fn [[ident diff]] (ref-updates env tempids ident diff)) delta)]

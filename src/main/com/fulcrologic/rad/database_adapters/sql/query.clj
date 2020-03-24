@@ -39,14 +39,10 @@
                    target-attr         (key->attribute target) ; :address/id
                    rev-target-table    (table-name key->attribute reverse-target-attr) ; account
                    rev-target-column   (column-name reverse-target-attr) ; id
-                   origin-table        (table-name key->attribute attr) ; account
-                   origin-column       (column-name attr)   ; addresses
+                   column              (column-name key->attribute attr) ; account_addresses_account_id
                    table               (table-name key->attribute target-attr) ; address
                    target-id-column    (column-name target-attr) ; id
-                   ;; account_addresses_account_id
-                   column              (or
-                                         (::rsql/column-name attr)
-                                         (str/join "_" [origin-table origin-column rev-target-table rev-target-column]))
+
                    id-list             (str/join "," (map q ids))]
         [(format "SELECT %1$s.%2$s AS c0, array_agg(%3$s.%4$s) AS c1 FROM %1$s LEFT JOIN %3$s ON %1$s.%2$s = %3$s.%5$s WHERE %1$s.%2$s IN (%6$s) GROUP BY %1$s.%2$s"
            rev-target-table rev-target-column table target-id-column column id-list)
