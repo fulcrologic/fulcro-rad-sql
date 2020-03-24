@@ -1,6 +1,17 @@
 = SQL Database Plugin
 
-A plugin for using SQL databases with Fulcro RAD (UNSTABLE)
+A plugin for using SQL databases with Fulcro RAD (ALPHA)
+
+image:https://img.shields.io/clojars/v/com.fulcrologic/fulcro-rad-sql.svg[link=https://clojars.org/com.fulcrologic/fulcro-rad-sql]
+
+Current SNAPSHOT CI status:
+image:https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/develop.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/develop"]
+
+Current RELEASE CI status:
+image:https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/master.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/master"]
+
+See the current version of `fulcro-rad-demo` for a working demo. This README is possibly out of date until
+this gets out of ALPHA.
 
 == Configuration
 
@@ -26,80 +37,60 @@ This allows you to do things like create more than one database with the same sc
 
 === Database Connection Pools
 
-This library includes a wrapper for HikariCP connection pools.
-You should configure it according to the documentation of that library by including settings for the following options in the application configuration (where each entry will become a Property for HikariCP):
+This library includes a wrapper for HikariCP connection pools. Basically all you need is a map from
+database name to a data source (which is what the adapter includes via HikariCP).
 
 [source,clojure]
 -----
-...
- :com.fulcrologic.rad.database-adapters.sql/databases
-   {:main {:hikaricp/config          {"dataSourceClassName"     "org.postgresql.ds.PGSimpleDataSource"
-                                      "dataSource.user"         "postgres"
-                                      "dataSource.password"     ""
-                                      "dataSource.databaseName" "example"
-                                      "dataSource.portNumber"   "5432"
-                                      "dataSource.serverName"   "localhost"}
-           :sql/auto-create-missing? false
-           ...}}
-...
------
-
-You should include a component in your application that starts the connection
-pools. For example in mount, along with a function
-that can return a clojure jdbc db spec. For example:
-
-[source, clojure]
-------
 (ns com.example.components.connection-pools
   (:require
     [mount.core :refer [defstate]]
-    [com.example.components.model :refer [all-attributes]]
+    [com.example.model :refer [all-attributes]]
     [com.example.components.config :refer [config]]
-    [com.fulcrologic.rad.database-adapters.sql :as sql])
-  (:import (com.zaxxer.hikari HikariDataSource)))
+    [com.fulcrologic.rad.database-adapters.sql.result-set :as rs]
+    [com.fulcrologic.rad.database-adapters.sql.connection :as pools]))
 
 (defstate connection-pools
   :start
-  (sql/create-connection-pools! config all-attributes)
+  (do
+    (rs/coerce-result-sets!)
+    (pools/create-connection-pools! config all-attributes))
   :stop
-  (sql/stop-connection-pools! connection-pools))
+  (pools/stop-connection-pools! connection-pools))
+-----
 
-;; The following assumes only one database and schema...
-(defn get-jdbc-datasource
-  "Returns a clojure jdbc compatible data source config."
-  []
-  (let [ds ^HikariDataSource (some-> connection-pools :main)]
-    {:datasource ds}))
-------
+We recommend you use Fulcro's config support. The configuration options for the SQL adapter look
+like this:
 
-This latter function must be used with your parser to generate
-a map in the env from schema names to usable connections. See <<Resolvers>>.
+[source]
+-----
+ :com.fulcrologic.rad.database-adapters.sql/databases
+                                    {:main {:flyway/migrate?          false
+                                            :flyway/migrations        ["classpath:config/sql_migrations"]
+                                            :hikaricp/config          {"dataSourceClassName" "org.h2.jdbcx.JdbcDataSource"
+                                                                       "dataSource.user"     "sa"
+                                                                       "dataSource.password" "sa"
+                                                                       "dataSource.URL"      "jdbc:h2:mem:dev-db"}
+                                            :sql/auto-create-missing? true
+                                            :sql/schema               :production}}
 
+-----
 
 === Schema Generation
 
-You can enable basic schema generation with the following configuration:
+Automatic schema is quite nice for early development work, and is enabled with the auto-create-missing flag.
 
-[source,clojure]
------
-...
- :com.fulcrologic.rad.database-adapters.sql/databases
-   {:main {...
-           :sql/auto-create-missing? true
-           ...}}
-...
------
+Each database should be given an (invented) schema name, which will match the schema you set on (some or all) attributes.
 
 The automatic schema generation just tries to generate columns in tables if (and only if) they do not already exist.
-This is reasonable for really fast startup of a project, but is almost ceratinly insufficient for real projects.
+This is reasonable for really fast startup of a project, but is almost certainly insufficient for real projects.
 
 As such this plugin includes functions that can leverage Flyway to execute migrations.
 
-=== Schema Validation
-
-TODO. It would be nice if there was a system that could verify that the declared attributes actually exist and at least have the correct type on the database.
-
 === Using Flyway
+
+The flyway options turn on/off (and locate) migration files. Use that if you want to manually create schema via
+Flyway files.
 
 See the Flyway documentation for specific details, but the bases are as follows:
 
@@ -121,38 +112,101 @@ See the Flyway documentation for specific details, but the bases are as follows:
 
 RAD attributes that will be used in an SQL database can be configured as follows (where the sql namespace is `com.fulcrologic.rad.database-adapters.sql`):
 
-`::sql/tables`:: (required) A set of strings.
-For identity attributes this set MUST contain exactly ONE table name.
-Other attributes may be designated to live in more than one table.
-`::sql/column-name`:: (optional) A string to use as the SQL table name.
-If not supplied it uses the `(name attr-key)`, which may not be a valid SQL identifier.
-`::sql/schema`:: (required) A keyword.
-Defines which schema this attribute is meant to be used in, which affects generation of schema and resolvers.
+`::attr/schema`:: (required) A keyword that matches the schema you want to store the attribute on.
+`::attr/identities`:: (required on non-identity attributes) A set of keyword (names) of the id attributes
+that identify tables for which this attribute is a row.
+`::sql/column-name`:: (optional) A string to use to override the automatic column name.
+`::sql/table-name`:: (optional, but only on identity attributes) A string. Overrides the table name that goes
+with a given identity attribute.
 
-TODO: Relations support.
-
-== Resolvers [[Resolvers]]
+== Resolvers and Save/Load Middleware [[Resolvers]]
 
 The library supports generation of batched resolvers that can run correct queries against tables that can be installed into your Pathom parser.
 
-You can generate resolvers with `sql/generate-resolvers`, which accepts a sequence of attributes (made with `defattr`) and the name of the schema.
+There is also save middleware that can automate saves on attributes that match the schema as the SQL adapter
+understands it. You may need additional middleware if your schema is more advanced.
 
-If you have more than one schema, simply call this function multiple times.
+The minimal middleware looks like this:
+
+[source]
+-----
+(ns com.example.components.save-middleware
+(:require
+  [com.fulcrologic.rad.middleware.save-middleware :as r.s.middleware]
+  [com.fulcrologic.rad.database-adapters.sql.middleware :as sql-middleware]
+  [com.example.model :as model]))
+
+(def middleware
+  (->
+    (sql-middleware/wrap-sql-save)
+    ...)))
+-----
+
+[source]
+-----
+(ns com.example.components.delete-middleware
+  (:require
+    [com.fulcrologic.rad.database-adapters.sql.middleware :as sql-middleware]))
+
+(def middleware (sql-middleware/wrap-sql-delete))
+-----
+
+[source]
+-----
+(ns com.example.components.auto-resolvers
+  (:require
+    [com.example.model :refer [all-attributes]]
+    [mount.core :refer [defstate]]
+    [com.fulcrologic.rad.resolvers :as res]
+    [com.fulcrologic.rad.database-adapters.sql.resolvers :as sql-res]
+    [taoensso.timbre :as log]))
+
+(defstate automatic-resolvers
+  :start
+  (vec
+    (concat
+      ;; custom resolvers that are declared on attributes
+      (res/generate-resolvers all-attributes)
+      ;; SQL resolvers
+      (sql-res/generate-resolvers all-attributes :production))))
+-----
+
+If you have more than one schema, simply call `sq-res/generate-resolvers` once for each schema.
 It returns a sequence of resolvers that can be installed into your parser.
 
-Also remember to set up the env so that it includes a map from schema name to
-the desired connection that the resolver should use. The generated resolvers
-use https://github.com/clojure/java.jdbc[Clojure JDBC], so the values
-in this map should be db-specs compatible with that.
+== The Parser
 
-NOTE: The parser construction should allow wrapping the call to the parser so you can start a transaction.
-This will be fixed in the near future.
+The central element of the entire back-end is the Pathom Parser. Give the above definitions it will look
+something like this:
 
 [source,clojure]
 -----
-(pathom/new-parser config
-    (fn [env]
-      (assoc env
-        ::sql/databases {:production (pools/get-jdbc-datasource)}))
-    [(sql/generate-resolvers all-attributes :production)])
+(ns com.example.components.parser
+  (:require
+    [com.example.components.auto-resolvers :refer [automatic-resolvers]]
+    [com.example.components.config :refer [config]]
+    [com.example.components.connection-pools :as pools]
+    [com.fulcrologic.rad.database-adapters.sql.plugin :as sql]
+    [com.fulcrologic.rad.pathom :as pathom]
+    [com.fulcrologic.rad.form :as form]
+    [com.fulcrologic.rad.blob :as blob]
+    [com.example.components.blob-store :as bs]
+    [com.example.components.save-middleware :as save]
+    [com.example.components.delete-middleware :as delete]
+    [mount.core :refer [defstate]]
+    [com.example.model :refer [all-attributes]]
+    [com.example.model.account :as account]
+    [com.example.model.timezone :as timezone]
+    [com.fulcrologic.rad.attributes :as rad.attr]
+    [com.example.model.invoice :as invoice]))
+
+(defstate parser
+  :start
+  (pathom/new-parser config
+    [(rad.attr/pathom-plugin all-attributes)
+     (form/pathom-plugin save/middleware delete/middleware)
+     (sql/pathom-plugin (fn [_] {:production (:main pools/connection-pools)}))]
+    [automatic-resolvers
+     form/resolvers
+     ...]))
 -----
