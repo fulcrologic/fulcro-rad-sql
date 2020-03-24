@@ -197,7 +197,8 @@
   (let
     [table-name     (sql.schema/table-name key->attribute id-attr)
      id-column-name (sql.schema/column-name id-attr)
-     target-id      (get tempids row-id row-id)]
+     target-id      (get tempids row-id row-id)
+     new-id         (get tempids new-id new-id)]
     (cond
       new-id
       (format "UPDATE %s SET %s = %s WHERE %s = %s"
@@ -217,6 +218,7 @@
         new-val           (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :after]))]
     (concat
       (keep (fn [a] (to-one-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-one-ref-attrs)
+      ;; TASK: Add to-many ref saves. These will be like to-one, and will assume tempids are already inserted
       ;; (keep (fn [a] (to-many-ref-update env id-attr tempids id a (old-val a) (new-val a))) to-many-ref-attrs)
       )))
 
