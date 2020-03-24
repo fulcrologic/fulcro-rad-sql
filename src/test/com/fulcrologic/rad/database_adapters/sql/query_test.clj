@@ -42,18 +42,18 @@
         id2 (ids/new-uuid 2)]
     (assertions
       "can convert a sequence of SQL result maps on scalars to EDN result maps"
-      (query/sql-results->edn-results [{:C0 id1 :C1 "joe"}
-                                       {:C0 id2 :C1 "sam"}] [attrs/account-id attrs/account-name])
+      (query/sql-results->edn-results [{:c0 id1 :c1 "joe"}
+                                       {:c0 id2 :c1 "sam"}] [attrs/account-id attrs/account-name])
       => [{:account/id id1 :account/name "joe"}
           {:account/id id2 :account/name "sam"}]
       "Supports forward-ref to-one joins"
-      (query/sql-results->edn-results [{:C0 id1 :C1 id1}
-                                       {:C0 id2 :C1 id2}] [attrs/account-id attrs/account-primary-address])
+      (query/sql-results->edn-results [{:c0 id1 :c1 id1}
+                                       {:c0 id2 :c1 id2}] [attrs/account-id attrs/account-primary-address])
       => [{:account/id id1 :account/primary-address {:address/id id1}}
           {:account/id id2 :account/primary-address {:address/id id2}}]
       "Supports aggregated result joins"
-      (query/sql-results->edn-results [{:C0 id1 :C1 (object-array [id1 id2])}
-                                       {:C0 id2 :C1 (object-array [id2])}]
+      (query/sql-results->edn-results [{:c0 id1 :c1 (object-array [id1 id2])}
+                                       {:c0 id2 :c1 (object-array [id2])}]
         [attrs/account-id attrs/account-addresses])
       => [{:account/id id1 :account/addresses [{:address/id id1} {:address/id id2}]}
           {:account/id id2 :account/addresses [{:address/id id2}]}])))
