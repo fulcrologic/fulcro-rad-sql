@@ -29,7 +29,7 @@
 
 (>defn to-many-join-column-query
   [{::attr/keys [key->attribute] :as env} {::attr/keys [target cardinality identities qualified-key] :as attr} ids]
-  [(s/keys :req [::attr/key->attribute]) ::attr/attribute coll? => (? (s/tuple string? ::attr/attributes))]
+  [any? ::attr/attribute coll? => (? (s/tuple string? ::attr/attributes))]
   (when (= :many cardinality)
     (do
       (when (not= 1 (count identities))
@@ -54,7 +54,7 @@
 
 (>defn base-property-query
   [env {id-key ::attr/qualified-key :as id-attr} attrs ids]
-  [(s/keys :req [::attr/key->attribute]) ::attr/attribute ::attr/attributes coll? => (s/tuple string? ::attr/attributes)]
+  [any? ::attr/attribute ::attr/attributes coll? => (s/tuple string? ::attr/attributes)]
   (let [attrs       (filter #(or
                                (not= :ref (::attr/type %))
                                (not= :many (::attr/cardinality %))) attrs)
@@ -66,9 +66,13 @@
         id-list     (str/join "," (map q ids))]
     [(format "SELECT %s FROM %s WHERE %s IN (%s)" columns table id-column id-list) table-attrs]))
 
-(defn coerce [value type]
-  (log/spy :info [value (type value)])
-  value)
+;; TASK: basic type coercion...probably at least need enum handling
+(defn coerce
+  ""
+  [value type]
+  (case type
+    :enum (when value (read-string value))
+    value))
 
 (defn- interpret-result [value {::attr/keys [cardinality type target]}]
   (cond
@@ -102,7 +106,7 @@
   "Find the attributes for the element of the (top-level) EQL query that exist on the given schema.
   Returns a sequence of attributes."
   [{::attr/keys [key->attribute] :as env} schema eql]
-  [(s/keys :req [::attr/key->attribute]) keyword? ::eql/query => ::attr/attributes]
+  [any? keyword? ::eql/query => ::attr/attributes]
   (let [nodes (:children (eql/query->ast eql))]
     (into []
       (keep
@@ -116,7 +120,7 @@
   [{::attr/keys [key->attribute]
     ::rsql/keys [connection-pools]
     :as         env} id-attribute eql-query resolver-input]
-  [(s/keys :req [::attr/key->attribute]) ::attr/attribute ::eql/query coll? => coll?]
+  [any? ::attr/attribute ::eql/query coll? => (? coll?)]
   (let [schema            (::attr/schema id-attribute)
         datasource        (or (get connection-pools schema) (throw (ex-info "Data source missing for schema" {:schema schema})))
         id-key            (::attr/qualified-key id-attribute)
@@ -124,19 +128,19 @@
         to-many-joins     (filterv #(and (= :many (::attr/cardinality %))
                                       (= :ref (::attr/type %))) attrs-of-interest)
         ids               (if (map? resolver-input)
-                            [(or (get resolver-input id-key) (throw (ex-info "Resolver input missing ID" {})))]
+                            [(or (get resolver-input id-key) (log/error "Resolver input missing ID" {:input resolver-input}))]
                             (mapv #(or (get % id-key)
-                                     (throw (ex-info "Resolver input missing ID" {}))) resolver-input))
+                                     (log/error ex-info "Resolver input missing ID" {:input resolver-input})) resolver-input))
         [base-query base-attributes] (base-property-query env id-attribute attrs-of-interest ids)
         joins-to-run      (mapv #(to-many-join-column-query env % ids) to-many-joins)
         one?              (map? resolver-input)]
     (when (seq ids)
-      (let [rows                  (sql/query datasource (log/spy :info [base-query]) {:builder-fn rs/as-unqualified-maps})
-            base-result-map-by-id (enc/keys-by id-key (sql-results->edn-results (log/spy :info rows) base-attributes))
+      (let [rows                  (sql/query datasource [base-query] {:builder-fn rs/as-unqualified-maps})
+            base-result-map-by-id (enc/keys-by id-key (sql-results->edn-results rows base-attributes))
             results-by-id         (reduce
                                     (fn [result [join-query join-attributes]]
-                                      (let [join-rows         (sql/query datasource (log/spy :info [join-query]) {:builder-fn rs/as-unqualified-maps})
-                                            join-eql-results  (sql-results->edn-results (log/spy :info join-rows) join-attributes)
+                                      (let [join-rows         (sql/query datasource [join-query] {:builder-fn rs/as-unqualified-maps})
+                                            join-eql-results  (sql-results->edn-results join-rows join-attributes)
                                             join-result-by-id (enc/keys-by id-key join-eql-results)]
                                         (deep-merge result join-result-by-id)))
                                     base-result-map-by-id
