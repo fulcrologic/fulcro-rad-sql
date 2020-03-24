@@ -20,7 +20,8 @@
     [clojure.set :as set]
     [clojure.spec.alpha :as s]
     [next.jdbc.sql :as sql]
-    [next.jdbc.result-set :as rs]))
+    [next.jdbc.result-set :as rs])
+  (:import (java.sql ResultSet ResultSetMetaData Clob Types)))
 
 (defn q [v]
   (cond
@@ -63,14 +64,6 @@
         id-list     (str/join "," (map q ids))]
     [(format "SELECT %s FROM %s WHERE %s IN (%s)" columns table id-column id-list) table-attrs]))
 
-;; TASK: basic type coercion...probably at least need enum handling
-(defn coerce
-  ""
-  [value type]
-  (case type
-    :enum (when value (read-string value))
-    value))
-
 (defn- interpret-result [value {::attr/keys [cardinality type target]}]
   (cond
     (and (= :ref type) (not= :many cardinality))
@@ -79,15 +72,15 @@
     (= :ref type)
     (mapv (fn [id] {target id}) value)
 
-    :else (coerce value type)))
+    :else value))
 
 (defn- convert-row [row attrs]
-  (when-not (contains? row :C0)
-    (log/error "Row is missing :Cn entries!" row))
+  (when-not (contains? row :c0)
+    (log/error "Row is missing :cn entries!" row))
   (:result
     (reduce
       (fn [{:keys [index result]} {::attr/keys [qualified-key] :as attr}]
-        (let [value (interpret-result (get row (keyword (str "C" index))) attr)]
+        (let [value (interpret-result (get row (keyword (str "c" index))) attr)]
           {:index  (inc index)
            :result (assoc result qualified-key value)}))
       {:index  0
@@ -113,6 +106,19 @@
               attr))))
       nodes)))
 
+(defn RAD-column-reader
+  "An example column-reader that still uses `.getObject` but expands CLOB
+  columns into strings."
+  [^ResultSet rs ^ResultSetMetaData md ^Integer i]
+  (let [col-type (.getColumnType md i)]
+    (cond
+      (= col-type Types/CLOB) (rs/clob->string (.getClob rs i))
+      (#{Types/TIMESTAMP Types/TIMESTAMP_WITH_TIMEZONE} col-type) (.getTimestamp rs i)
+      :else (.getObject rs i))))
+
+;; Type coercion is handled by the row builder
+(def row-builder (rs/as-maps-adapter rs/as-unqualified-lower-maps RAD-column-reader))
+
 (>defn eql-query!
   [{::attr/keys [key->attribute]
     ::rsql/keys [connection-pools]
@@ -132,11 +138,11 @@
         joins-to-run      (mapv #(to-many-join-column-query env % ids) to-many-joins)
         one?              (map? resolver-input)]
     (when (seq ids)
-      (let [rows                  (sql/query datasource [base-query] {:builder-fn rs/as-unqualified-maps})
+      (let [rows                  (sql/query datasource [base-query] {:builder-fn row-builder})
             base-result-map-by-id (enc/keys-by id-key (sql-results->edn-results rows base-attributes))
             results-by-id         (reduce
                                     (fn [result [join-query join-attributes]]
-                                      (let [join-rows         (sql/query datasource [join-query] {:builder-fn rs/as-unqualified-maps})
+                                      (let [join-rows         (sql/query datasource [join-query] {:builder-fn row-builder})
                                             join-eql-results  (sql-results->edn-results join-rows join-attributes)
                                             join-result-by-id (enc/keys-by id-key join-eql-results)]
                                         (deep-merge result join-result-by-id)))
