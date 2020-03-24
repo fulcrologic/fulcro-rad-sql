@@ -23,9 +23,10 @@
     [next.jdbc.result-set :as rs]))
 
 (defn q [v]
-  (if (int? v)
-    v
-    (str "'" v "'")))
+  (cond
+    (int? v) v
+    (boolean? v) v
+    :else (str "'" v "'")))
 
 (>defn to-many-join-column-query
   [{::attr/keys [key->attribute] :as env} {::attr/keys [target cardinality identities qualified-key] :as attr} ids]

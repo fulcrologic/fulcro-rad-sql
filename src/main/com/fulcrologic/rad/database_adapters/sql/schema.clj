@@ -41,6 +41,9 @@
     column-name
     (some-> qualified-key name csk/->snake_case)))
 
+(defn sequence-name [id-attribute]
+  (str (table-name id-attribute) "_" (column-name id-attribute) "_seq"))
+
 (def attr->column-name column-name)
 
 (defn tables-and-columns
