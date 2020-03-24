@@ -102,7 +102,7 @@
   "Find the attributes for the element of the (top-level) EQL query that exist on the given schema.
   Returns a sequence of attributes."
   [{::attr/keys [key->attribute] :as env} schema eql]
-  [(s/keys :req [key->attribute]) keyword? ::eql/query => ::attr/attributes]
+  [(s/keys :req [::attr/key->attribute]) keyword? ::eql/query => ::attr/attributes]
   (let [nodes (:children (eql/query->ast eql))]
     (into []
       (keep

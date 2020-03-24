@@ -20,17 +20,12 @@
 (defn entity-query
   "The entity query used by the pathom resolvers."
   [{::rad.attr/keys [id-attribute key->attribute] :as env} input]
-  (let [schema (::rad.attr/schema id-attribute)
-        one?   (not (sequential? input))]
-    (enc/if-let [data-source (get-in env [::rad.sql/connection-pools schema])
-                 query*      (or
-                               (get env :com.wsscode.pathom.core/parent-query)
-                               (get env ::rad.sql/default-query))]
-      (let [result {} #_(sql.query/eql-query env data-source query* input)]
-        (if one?
-          (first result)
-          result))
-      (log/info "Unable to complete query."))))
+  (enc/if-let [query* (get env ::rad.sql/default-query)]
+    (let [result (sql.query/eql-query! env id-attribute query* input)]
+      result)
+    (do
+      (log/info "Unable to complete query.")
+      nil)))
 
 
 (defn id-resolver [{::rad.attr/keys [id-attribute attributes k->attr]}]
