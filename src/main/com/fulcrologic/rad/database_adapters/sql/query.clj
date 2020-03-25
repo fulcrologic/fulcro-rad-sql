@@ -131,9 +131,9 @@
         to-many-joins     (filterv #(and (= :many (::attr/cardinality %))
                                       (= :ref (::attr/type %))) attrs-of-interest)
         ids               (if (map? resolver-input)
-                            [(or (get resolver-input id-key) (log/error "Resolver input missing ID" {:input resolver-input}))]
+                            [(or (get resolver-input id-key) (log/error "Resolver input missing ID" {:input resolver-input, :expected-key id-key}))]
                             (mapv #(or (get % id-key)
-                                     (log/error ex-info "Resolver input missing ID" {:input resolver-input})) resolver-input))
+                                     (log/error ex-info "Resolver input missing ID" {:input resolver-input, :expected-key id-key})) resolver-input))
         [base-query base-attributes] (base-property-query env id-attribute attrs-of-interest ids)
         joins-to-run      (mapv #(to-many-join-column-query env % ids) to-many-joins)
         one?              (map? resolver-input)]
