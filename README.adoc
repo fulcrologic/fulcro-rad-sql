@@ -210,3 +210,9 @@ something like this:
      form/resolvers
      ...]))
 -----
+
+== License and Copyright
+
+This library is Copyright 2020 by Fulcrologic, LLC. All rights reserved.
+
+Formal licensing of this library has yet to be determined.
