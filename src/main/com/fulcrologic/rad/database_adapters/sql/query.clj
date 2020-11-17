@@ -64,7 +64,14 @@
         id-list     (str/join "," (map q ids))]
     [(format "SELECT %s FROM %s WHERE %s IN (%s)" columns table id-column id-list) table-attrs]))
 
-(defn- interpret-result [value {::attr/keys [cardinality type target]}]
+(defn sql->form-value [{::attr/keys [type]
+                        ::rsql/keys [sql->form-value]} sql-value]
+  (cond
+    sql->form-value (sql->form-value sql-value)
+    (and (string? sql-value) (= type :enum)) (read-string sql-value)
+    :else sql-value))
+
+(defn- interpret-result [value {::attr/keys [cardinality type target] :as attr}]
   (cond
     (and (= :ref type) (not= :many cardinality))
     {target value}
@@ -72,7 +79,7 @@
     (= :ref type)
     (mapv (fn [id] {target id}) value)
 
-    :else value))
+    :else (sql->form-value attr value)))
 
 (defn- convert-row [row attrs]
   (when-not (contains? row :c0)

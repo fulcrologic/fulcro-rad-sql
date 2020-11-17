@@ -4,6 +4,7 @@
     [com.fulcrologic.rad.authorization :as auth]
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.form :as rad.form]
+    [com.fulcrologic.rad.options-util :refer [?!]]
     [com.fulcrologic.guardrails.core :refer [>defn => |]]
     [com.fulcrologic.rad.database-adapters.sql :as rsql]
     [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
@@ -123,6 +124,15 @@
     (when (not= :ref type)
       attr)))
 
+(defn form->sql-value [{::attr/keys [type]
+                        ::rsql/keys [form->sql-value]} form-value]
+  (cond
+    form->sql-value (form->sql-value form-value)
+    (= type :enum) (str form-value)
+    :else form-value))
+
+
+
 (defn scalar-insert
   [{::attr/keys [key->attribute] :as env} schema-to-save tempids [table id :as ident] diff]
   (when (tempid/tempid? id)
@@ -133,7 +143,9 @@
               scalar-attrs  (keep
                               (fn [k] (table-local-attr key->attribute k))
                               (keys diff))
-              new-val       (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :after]))
+              new-val       (fn [{::attr/keys [qualified-key] :as attr}]
+                              (some->> (get-in diff [qualified-key :after])
+                                (form->sql-value attr)))
               column-names  (str/join "," (into [(sql.schema/column-name id-attr)]
                                             (keep (fn [attr]
                                                     (when-not (nil? (new-val attr))
@@ -161,8 +173,12 @@
               scalar-attrs (keep
                              (fn [k] (table-local-attr key->attribute k))
                              (keys diff))
-              old-val      (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :before]))
-              new-val      (fn [{::attr/keys [qualified-key]}] (get-in diff [qualified-key :after]))
+              old-val      (fn [{::attr/keys [qualified-key] :as attr}]
+                             (some->> (get-in diff [qualified-key :before])
+                               (form->sql-value attr)))
+              new-val      (fn [{::attr/keys [qualified-key] :as attr}]
+                             (some->> (get-in diff [qualified-key :after])
+                               (form->sql-value attr)))
               {:keys [columns values]} (reduce
                                          (fn [{:keys [columns values] :as result} attr]
                                            (let [new      (new-val attr)
