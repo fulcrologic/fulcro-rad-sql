@@ -110,7 +110,7 @@
       (if (tempid/tempid? id)
         (let [{::attr/keys [type] :as id-attr} (key->attribute table)
               real-id (if (#{:int :long} type)
-                        (:ID (first (jdbc/execute! ds [(format "SELECT NEXTVAL('%s') AS id" (sql.schema/sequence-name id-attr))])))
+                        (:id (first (jdbc/execute! ds [(format "SELECT NEXTVAL('%s') AS id" (sql.schema/sequence-name id-attr))])))
                         (ids/new-uuid))]
           (assoc result id real-id))
         result))
