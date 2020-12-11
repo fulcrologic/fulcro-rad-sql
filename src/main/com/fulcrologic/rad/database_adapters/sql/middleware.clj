@@ -16,6 +16,7 @@
            handler-result (handler pathom-env)]
        (deep-merge save-result handler-result)))))
 
+
 (defn wrap-sql-delete
   "Form delete middleware to accomplish SQL deletes."
   ([handler]

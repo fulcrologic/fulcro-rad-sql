@@ -6,7 +6,7 @@
     [com.fulcrologic.rad.form :as rad.form]
     [com.fulcrologic.rad.options-util :refer [?!]]
     [com.fulcrologic.guardrails.core :refer [>defn => |]]
-    [com.fulcrologic.rad.database-adapters.sql :as rsql]
+    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
     [com.wsscode.pathom.connect :as pc]
@@ -30,7 +30,7 @@
 (defn entity-query
   "The entity query used by the pathom resolvers."
   [{::attr/keys [id-attribute key->attribute] :as env} input]
-  (enc/if-let [query* (get env ::rsql/default-query)]
+  (enc/if-let [query* (get env ::rad.sql/default-query)]
     (let [result (sql.query/eql-query! env id-attribute query* input)]
       result)
     (do
@@ -52,7 +52,7 @@
                         (assoc env
                           ::attr/id-attribute id-attribute
                           ::attr/schema schema
-                          ::rsql/default-query outputs)
+                          ::rad.sql/default-query outputs)
                         input)))
      ::pc/input   #{id-key}}
     (log/error
@@ -124,8 +124,8 @@
     (when (not= :ref type)
       attr)))
 
-(defn form->sql-value [{::attr/keys [type]
-                        ::rsql/keys [form->sql-value]} form-value]
+(defn form->sql-value [{::attr/keys    [type]
+                        ::rad.sql/keys [form->sql-value]} form-value]
   (cond
     form->sql-value (form->sql-value form-value)
     (= type :enum) (str form-value)
@@ -155,9 +155,9 @@
               placeholders  (str/join "," (repeat (count column-values) "?"))]
           (into [(format "INSERT INTO %s (%s) VALUES (%s)" table-name column-names placeholders)] column-values))))))
 
-(defn delta->scalar-inserts [{::attr/keys [key->attribute]
-                              ::rsql/keys [connection-pools]
-                              :as         env} schema delta]
+(defn delta->scalar-inserts [{::attr/keys    [key->attribute]
+                              ::rad.sql/keys [connection-pools]
+                              :as            env} schema delta]
   (let [ds      (get connection-pools schema)
         tempids (generate-tempids ds key->attribute delta)
         stmts   (keep (fn [[ident diff]] (scalar-insert env schema tempids ident diff)) delta)]
@@ -225,7 +225,7 @@
 (defn to-one-ref-update [{::attr/keys [key->attribute] :as env} schema-to-save id-attr tempids row-id attr old-val [_ new-id :as new-val]]
   (when (= schema-to-save (::attr/schema attr))
     (let [table-name     (sql.schema/table-name key->attribute id-attr)
-          {delete-on-remove? ::rsql/delete-referent?} attr
+          {delete-on-remove? ::rad.sql/delete-referent?} attr
           id-column-name (sql.schema/column-name id-attr)
           target-id      (get tempids row-id row-id)
           new-id         (get tempids new-id new-id)]
@@ -250,7 +250,7 @@
 (defn to-many-ref-update [{::attr/keys [key->attribute] :as env} schema target-row-id-attr tempids target-id to-many-attr old-val new-val]
   (enc/when-let [table-key     (and (not= old-val new-val) (ffirst (concat old-val new-val)))
                  right-schema? (= schema (::attr/schema to-many-attr))]
-    (let [{delete-on-remove? ::rsql/delete-referent?} to-many-attr
+    (let [{delete-on-remove? ::rad.sql/delete-referent?} to-many-attr
           target-id       (get tempids target-id target-id)
           foreign-id-attr (key->attribute table-key)
           foreign-table   (sql.schema/table-name key->attribute foreign-id-attr)
@@ -290,9 +290,9 @@
 (defn save-form!
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"
-  [{::attr/keys [key->attribute]
-    ::rsql/keys [connection-pools]
-    :as         env} {::rad.form/keys [delta]}]
+  [{::attr/keys    [key->attribute]
+    ::rad.sql/keys [connection-pools]
+    :as            env} {::rad.form/keys [delta]}]
   (let [schemas (schemas-for-delta env delta)
         result  (atom {:tempids {}})]
     (log/debug "Saving form across " schemas)

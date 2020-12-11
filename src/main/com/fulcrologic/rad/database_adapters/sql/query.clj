@@ -7,7 +7,7 @@
   - Persisting data based off submitted form deltas"
   (:require
     [com.fulcrologic.rad.attributes :as attr]
-    [com.fulcrologic.rad.database-adapters.sql :as rsql]
+    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.schema :refer [column-name table-name]]
     [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
     [clojure.string :as str]
@@ -64,8 +64,8 @@
         id-list     (str/join "," (map q ids))]
     [(format "SELECT %s FROM %s WHERE %s IN (%s)" columns table id-column id-list) table-attrs]))
 
-(defn sql->form-value [{::attr/keys [type]
-                        ::rsql/keys [sql->form-value]} sql-value]
+(defn sql->form-value [{::attr/keys    [type]
+                        ::rad.sql/keys [sql->form-value]} sql-value]
   (cond
     sql->form-value (sql->form-value sql-value)
     (and (string? sql-value) (= type :enum)) (read-string sql-value)
@@ -127,9 +127,9 @@
 (def row-builder (rs/as-maps-adapter rs/as-unqualified-lower-maps RAD-column-reader))
 
 (>defn eql-query!
-  [{::attr/keys [key->attribute]
-    ::rsql/keys [connection-pools]
-    :as         env} id-attribute eql-query resolver-input]
+  [{::attr/keys    [key->attribute]
+    ::rad.sql/keys [connection-pools]
+    :as            env} id-attribute eql-query resolver-input]
   [any? ::attr/attribute ::eql/query coll? => (? coll?)]
   (let [schema            (::attr/schema id-attribute)
         datasource        (or (get connection-pools schema) (throw (ex-info "Data source missing for schema" {:schema schema})))
