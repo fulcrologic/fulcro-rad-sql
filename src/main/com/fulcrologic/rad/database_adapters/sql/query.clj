@@ -32,7 +32,8 @@
 (>defn to-many-join-column-query
   [{::attr/keys [key->attribute] :as env} {::attr/keys [target cardinality identities qualified-key] :as attr} ids]
   [any? ::attr/attribute coll? => (? (s/tuple string? ::attr/attributes))]
-  (when (= :many cardinality)
+  (log/spy :trace qualified-key)
+  (when (= :many (log/spy :trace cardinality))
     (do
       (when (not= 1 (count identities))
         (throw (ex-info "Reference column must have exactly 1 ::attr/identities entry." {:k qualified-key})))
@@ -145,11 +146,11 @@
         joins-to-run      (mapv #(to-many-join-column-query env % ids) to-many-joins)
         one?              (map? resolver-input)]
     (when (seq ids)
-      (let [rows                  (sql/query datasource [base-query] {:builder-fn row-builder})
+      (let [rows                  (sql/query datasource (log/spy :trace [base-query]) {:builder-fn row-builder})
             base-result-map-by-id (enc/keys-by id-key (sql-results->edn-results rows base-attributes))
             results-by-id         (reduce
                                     (fn [result [join-query join-attributes]]
-                                      (let [join-rows         (sql/query datasource [join-query] {:builder-fn row-builder})
+                                      (let [join-rows         (sql/query datasource (log/spy :trace [join-query]) {:builder-fn row-builder})
                                             join-eql-results  (sql-results->edn-results join-rows join-attributes)
                                             join-result-by-id (enc/keys-by id-key join-eql-results)]
                                         (deep-merge result join-result-by-id)))

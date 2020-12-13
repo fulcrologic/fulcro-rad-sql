@@ -22,7 +22,8 @@
     [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.rad.ids :as ids]
     [clojure.string :as str]
-    [clojure.set :as set]))
+    [clojure.set :as set]
+    [edn-query-language.core :as eql]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Reads
@@ -121,23 +122,22 @@
   "Returns an attribute or nil if it isn't stored on the semantic table of the attribute."
   [k->a k]
   (let [{::attr/keys [type cardinality] :as attr} (k->a k)]
-    (when (not= :ref type)
+    (when-not (and (= cardinality :many) (= :ref type))
       attr)))
 
-(defn form->sql-value [{::attr/keys    [type]
+(defn form->sql-value [{::attr/keys    [type cardinality]
                         ::rad.sql/keys [form->sql-value]} form-value]
   (cond
+    (and (= :ref type) (not= :many cardinality) (eql/ident? form-value)) (second form-value)
     form->sql-value (form->sql-value form-value)
     (= type :enum) (str form-value)
     :else form-value))
 
-
-
 (defn scalar-insert
   [{::attr/keys [key->attribute] :as env} schema-to-save tempids [table id :as ident] diff]
-  (when (tempid/tempid? id)
+  (when (tempid/tempid? (log/spy :trace id))
     (let [{::attr/keys [type schema] :as id-attr} (key->attribute table)]
-      (when (= schema schema-to-save)
+      (if (= (log/spy :trace schema) (log/spy :trace schema-to-save))
         (let [table-name    (sql.schema/table-name key->attribute id-attr)
               real-id       (get tempids id id)
               scalar-attrs  (keep
@@ -153,7 +153,8 @@
                                             scalar-attrs))
               column-values (into [real-id] (keep new-val) scalar-attrs)
               placeholders  (str/join "," (repeat (count column-values) "?"))]
-          (into [(format "INSERT INTO %s (%s) VALUES (%s)" table-name column-names placeholders)] column-values))))))
+          (into [(format "INSERT INTO %s (%s) VALUES (%s)" table-name column-names placeholders)] column-values))
+        (log/debug "Schemas do not match. Not updating" ident)))))
 
 (defn delta->scalar-inserts [{::attr/keys    [key->attribute]
                               ::rad.sql/keys [connection-pools]
@@ -207,7 +208,7 @@
               (conj values id))))))))
 
 (defn delta->scalar-updates [env schema delta]
-  (let [stmts (keep (fn [[ident diff]] (scalar-update env schema ident diff)) delta)]
+  (let [stmts (vec (keep (fn [[ident diff]] (scalar-update env schema ident diff)) delta))]
     stmts))
 
 (defn- ref-one-attr
@@ -284,14 +285,14 @@
       (mapcat (fn [a] (to-many-ref-update env schema id-attr tempids id a (old-val a) (new-val a))) to-many-ref-attrs))))
 
 (defn delta->ref-updates [env tempids schema delta]
-  (let [stmts (mapcat (fn [[ident diff]] (ref-updates env schema tempids ident diff)) delta)]
+  (let [stmts (vec (mapcat (fn [[ident diff]] (ref-updates env schema tempids ident diff)) delta))]
     stmts))
 
 (defn save-form!
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"
   [{::attr/keys    [key->attribute]
-    ::rad.sql/keys [connection-pools]
+    ::rad.sql/keys [connection-pools postgresql?]
     :as            env} {::rad.form/keys [delta]}]
   (let [schemas (schemas-for-delta env delta)
         result  (atom {:tempids {}})]
@@ -301,11 +302,14 @@
     (doseq [schema (keys connection-pools)]
       (let [ds             (get connection-pools schema)
             ;; TASK: None of these are filtering by schema, though they have it as an arg
-            {:keys [tempids insert-scalars]} (delta->scalar-inserts env schema delta) ; any non-fk column with a tempid
-            update-scalars (delta->scalar-updates env schema delta) ; any non-fk columns on entries with pre-existing id
-            update-refs    (delta->ref-updates env tempids schema delta) ; all fk columns on entire delta
+            {:keys [tempids insert-scalars]} (log/spy :trace (delta->scalar-inserts env schema delta)) ; any non-fk column with a tempid
+            update-scalars (log/spy :trace (delta->scalar-updates env schema delta)) ; any non-fk columns on entries with pre-existing id
+            update-refs    (log/spy :trace (delta->ref-updates env tempids schema delta)) ; all fk columns on entire delta
             steps          (concat insert-scalars update-scalars update-refs)]
         (jdbc/with-transaction [ds ds {:isolation :serializable}]
+          (when postgresql?
+            ;; allow relaxed FK constraints until end of txn
+            (jdbc/execute! ds (log/spy :trace ["SET CONSTRAINTS ALL DEFERRED"])))
           (doseq [stmt-with-params steps]
             (log/debug stmt-with-params)
             (jdbc/execute! ds stmt-with-params)))
