@@ -7,7 +7,8 @@
   :com.fulcrologic.rad.database-adapters.sql/table)
 
 (def column-name
-  "Attribute option. The string name to use for the SQL column name."
+  "Attribute option. The string name to use for the SQL column name. Defaults to
+  the snake_case name of the attribute."
   :com.fulcrologic.rad.database-adapters.sql/column-name)
 
 (def max-length
