@@ -16,12 +16,11 @@
     (assertions
       "will only insert updates to non-nil scalar fields"
       (res/scalar-insert {::attr/key->attribute key->attribute} :production {tempid 1} [:account/id tempid]
-        {:account/name            {:before "joe" :after "sam"}
-         :account/addresses       {:before [[:address/id 5] [:address/id 6]]
-                                   :after  [[:address/id 22]]}
+        {:account/name            {:before "" :after "sam"}
+         :account/addresses       {:before [] :after  [[:address/id 22]]}
          :account/active?         {:before true :after false}
          :account/primary-address {:before 3 :after 4}})
-      => ["INSERT INTO accounts (id,name,active) VALUES (?,?,?)" 1 "sam" false]
+      => ["INSERT INTO accounts (id,name,active,primary_address) VALUES (?,?,?,?)" 1 "sam" false 4]
       "ignores rows that are not new"
       (nil?
         (res/scalar-insert {::attr/key->attribute key->attribute} :production {} [:account/id 1]
@@ -60,8 +59,8 @@
                                    :after  [[:address/id 22]]}
          :account/active?         {:before true :after false}
          :account/primary-address {:before 3 :after 4}})
-      => ["UPDATE accounts SET name = ?,active = ? WHERE id = ?"
-          "sam" false 1]
+      => ["UPDATE accounts SET name = ?,active = ?,primary_address = ? WHERE id = ?"
+          "sam" false 4 1]
       "ignores changes for other schema"
       (nil?
         (res/scalar-update {::attr/key->attribute key->attribute} :other [:account/id 1]
