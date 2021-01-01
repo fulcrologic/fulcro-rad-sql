@@ -113,7 +113,9 @@
     (if (= :enum type)
       (let [enums (str/join "," (map #(str "'" % "'") enumerated-values))]
         (if (seq enumerated-values)
-          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s ENUM(%s);\n" table column enums)
+          (str
+            (format "CREATE TYPE %s_t AS ENUM (%s);" column enums)
+            (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s_t;\n" table column column))
           (do
             (log/error "Enumeration is missing `::attr/enumerated-values`. Cannot create column in database.")
             "")))
