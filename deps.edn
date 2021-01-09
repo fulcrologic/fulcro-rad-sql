@@ -1,16 +1,16 @@
 {:paths   ["src/main"]
 
- :deps    {edn-query-language/eql     {:mvn/version "0.0.9"}
-           camel-snake-kebab          {:mvn/version "0.4.0"}
-           com.taoensso/timbre        {:mvn/version "4.10.0"}
-           com.taoensso/encore        {:mvn/version "2.115.0"}
-           com.fulcrologic/guardrails {:mvn/version "0.0.12"}
-           com.fulcrologic/fulcro-rad {:mvn/version "0.0.1-alpha-12"}
-           seancorfield/next.jdbc     {:mvn/version "1.0.409"}
-           com.zaxxer/HikariCP        {:mvn/version "3.4.2"}
-           org.flywaydb/flyway-core   {:mvn/version "4.2.0"}
-           com.wsscode/pathom         {:mvn/version "2.2.31"}
-           org.clojure/clojure        {:mvn/version "1.10.1"}}
+ :deps    {edn-query-language/eql              {:mvn/version "0.0.9"}
+           camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.0"}
+           com.taoensso/timbre                 {:mvn/version "4.10.0"}
+           com.taoensso/encore                 {:mvn/version "2.115.0"}
+           com.fulcrologic/guardrails          {:mvn/version "0.0.12"}
+           com.fulcrologic/fulcro-rad          {:mvn/version "0.0.1-alpha-12"}
+           seancorfield/next.jdbc              {:mvn/version "1.0.409"}
+           com.zaxxer/HikariCP                 {:mvn/version "3.4.2"}
+           org.flywaydb/flyway-core            {:mvn/version "4.2.0"}
+           com.wsscode/pathom                  {:mvn/version "2.2.31"}
+           org.clojure/clojure                 {:mvn/version "1.10.1"}}
 
  :aliases {:test      {:extra-paths ["src/test"]
                        :extra-deps  {fulcrologic/fulcro-spec {:mvn/version "3.1.5"}}}
