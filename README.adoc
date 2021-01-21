@@ -70,6 +70,7 @@ like this:
                                                                        "dataSource.password" "sa"
                                                                        "dataSource.URL"      "jdbc:h2:mem:dev-db"}
                                             :sql/auto-create-missing? true
+                                            :sql/adapter              :h2
                                             :sql/schema               :production}}
 
 -----
@@ -203,7 +204,7 @@ something like this:
   (pathom/new-parser config
     [(rad.attr/pathom-plugin all-attributes)
      (form/pathom-plugin save/middleware delete/middleware)
-     (sql/pathom-plugin (fn [_] {:production (:main pools/connection-pools)}))]
+     (sql/pathom-plugin (fn [_] {:production (:main pools/connection-pools)}) config)]
     [automatic-resolvers
      form/resolvers
      ...]))
