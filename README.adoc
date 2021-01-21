@@ -22,6 +22,7 @@ The general layout of a config (which commonly includes `config/defaults.edn` on
 ...
  :com.fulcrologic.rad.database-adapters.sql/databases
    {:main {:sql/schema         :production
+           :sql/adapter        :h2 ; or :postgresql
            :hikaricp/config    {... see below ...}}}
 ...
 -----
