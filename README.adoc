@@ -4,12 +4,6 @@ A plugin for using SQL databases with Fulcro RAD (ALPHA)
 
 image:https://img.shields.io/clojars/v/com.fulcrologic/fulcro-rad-sql.svg[link=https://clojars.org/com.fulcrologic/fulcro-rad-sql]
 
-Current SNAPSHOT CI status:
-image:https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/develop.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/develop"]
-
-Current RELEASE CI status:
-image:https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/master.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-rad-sql/tree/master"]
-
 See the current version of `fulcro-rad-demo` for a working demo. This README is possibly out of date until
 this gets out of ALPHA.
 

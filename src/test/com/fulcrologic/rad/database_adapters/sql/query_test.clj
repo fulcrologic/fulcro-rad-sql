@@ -77,7 +77,6 @@
         id4 (ids/new-uuid 4)
         ds  (jdbc/get-datasource {:dbtype "h2:mem"})]
     (with-open [c (.getConnection ds)]
-      ;; TASK: adapter
       (doseq [s (mig/automatic-schema :production (vendor/->H2Adapter) attrs/all-attributes)]
         (log/info s)
         (jdbc/execute! c [s]))
@@ -93,14 +92,14 @@
           attrs/account-id
           [:account/name {:account/addresses [:address/street]}]
           {:account/id id1})
-        => {:account/id id1 :account/name "joe" :account/addresses []}
+        => {:account/id id1 :account/name "joe"}
         "Can resolve a batch query"
         (query/eql-query! {::attr/key->attribute   key->attribute
                            ::rsql/connection-pools {:production c}}
           attrs/account-id
           [:account/name {:account/addresses [:address/street]}]
           [{:account/id id1}])
-        => [{:account/id id1 :account/name "joe" :account/addresses []}]
+        => [{:account/id id1 :account/name "joe"}]
         "Can resolve to-one forward refs"
         (query/eql-query! {::attr/key->attribute   key->attribute
                            ::rsql/connection-pools {:production c}}
