@@ -130,10 +130,11 @@
 
 (defn- table-local-attr
   "Returns an attribute or nil if it isn't stored on the semantic table of the attribute."
-  [k->a k]
-  (let [{::attr/keys [type cardinality] :as attr} (k->a k)]
-    (when-not (and (= cardinality :many) (= :ref type))
-      attr)))
+  [k->a schema-to-save k]
+  (let [{::attr/keys [type cardinality schema] :as attr} (k->a k)]
+    (when (= schema schema-to-save)
+      (when-not (and (= cardinality :many) (= :ref type))
+        attr))))
 
 (defn form->sql-value [{::attr/keys    [type cardinality]
                         ::rad.sql/keys [form->sql-value]} form-value]
@@ -147,17 +148,17 @@
   [{::attr/keys [key->attribute] :as env} schema-to-save tempids [table id :as ident] diff]
   (when (tempid/tempid? (log/spy :trace id))
     (let [{::attr/keys [type schema] :as id-attr} (key->attribute table)]
-      (if (= (log/spy :trace schema) (log/spy :trace schema-to-save))
+      (if (= schema schema-to-save)
         (let [table-name    (sql.schema/table-name key->attribute id-attr)
               real-id       (get tempids id id)
               scalar-attrs  (keep
-                              (fn [k] (table-local-attr key->attribute k))
+                              (fn [k] (table-local-attr key->attribute schema-to-save k))
                               (keys diff))
-              new-val       (fn [{::attr/keys [qualified-key] :as attr}]
-                              (log/spy :trace qualified-key)
-                              (let [v (get-in diff [qualified-key :after])
-                                    v (resolve-tempid-in-value tempids v)]
-                                (form->sql-value attr v)))
+              new-val       (fn [{::attr/keys [qualified-key schema] :as attr}]
+                              (when (= schema schema-to-save)
+                                (let [v (get-in diff [qualified-key :after])
+                                      v (resolve-tempid-in-value tempids v)]
+                                  (form->sql-value attr v))))
               column-names  (str/join "," (into [(sql.schema/column-name id-attr)]
                                             (keep (fn [attr]
                                                     (when-not (nil? (new-val attr))
@@ -185,15 +186,16 @@
       (when (= schema-to-save schema)
         (let [table-name   (sql.schema/table-name key->attribute id-attr)
               scalar-attrs (keep
-                             (fn [k] (table-local-attr key->attribute k))
+                             (fn [k] (table-local-attr key->attribute schema-to-save k))
                              (keys diff))
               old-val      (fn [{::attr/keys [qualified-key] :as attr}]
                              (some->> (get-in diff [qualified-key :before])
                                (form->sql-value attr)))
-              new-val      (fn [{::attr/keys [qualified-key] :as attr}]
-                             (let [v (get-in diff [qualified-key :after])
-                                   v (resolve-tempid-in-value tempids v)]
-                               (form->sql-value attr v)))
+              new-val      (fn [{::attr/keys [qualified-key schema] :as attr}]
+                             (when (= schema schema-to-save)
+                               (let [v (get-in diff [qualified-key :after])
+                                     v (resolve-tempid-in-value tempids v)]
+                                 (form->sql-value attr v))))
               {:keys [columns values]} (reduce
                                          (fn [{:keys [columns values] :as result} attr]
                                            (let [new      (log/spy :trace (new-val attr))
@@ -316,7 +318,6 @@
     (doseq [schema (keys connection-pools)]
       (let [adapter        (get adapters schema default-adapter)
             ds             (get connection-pools schema)
-            ;; TASK: None of these are filtering by schema, though they have it as an arg
             {:keys [tempids insert-scalars]} (log/spy :trace (delta->scalar-inserts env schema delta)) ; any non-fk column with a tempid
             update-scalars (log/spy :trace (delta->scalar-updates (assoc env ::tempids tempids) schema delta)) ; any non-fk columns on entries with pre-existing id
             update-refs    (log/spy :trace (delta->ref-updates env tempids schema delta)) ; all fk columns on entire delta
