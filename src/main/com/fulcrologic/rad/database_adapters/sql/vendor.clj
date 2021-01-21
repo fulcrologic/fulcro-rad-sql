@@ -12,7 +12,7 @@
 
 (deftype H2Adapter []
   VendorAdapter
-  (relax-constraints! [_ _])
+  (relax-constraints! [_ ds] (jdbc/execute! ds ["SET REFERENTIAL_INTEGRITY FALSE"]))
   (add-referential-column-statement [this origin-table origin-column target-type target-table target-column]
     (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s);\n"
       origin-table origin-column target-type target-table target-column)))
