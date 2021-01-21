@@ -12,8 +12,10 @@
   :com.fulcrologic.rad.database-adapters.sql/column-name)
 
 (def max-length
-  "Attribute option. The max length for string attributes when this adapter
-   generates schema for it. Only used by the auto-generation. Defaults to 200."
+  "Attribute option. The max length for attributes that are internally represented by strings. This
+   includes keywords, symbols, password, enumerations, and raw strings. This is ONLY used when this adapter
+   generates schema for it. Only used by the auto-generation. Defaults to 2k for strings, and roughly
+   200 characters for most other types."
   :com.fulcrologic.rad.database-adapters.sql/max-length)
 
 (def ^:deprecated sql->form-value "DEPRECATED. See sql->model-value."

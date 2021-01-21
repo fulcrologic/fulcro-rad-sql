@@ -8,22 +8,26 @@
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
     [clojure.spec.alpha :as s])
   (:import (org.flywaydb.core Flyway)
            (com.zaxxer.hikari HikariDataSource)))
 
 (def type-map
-  {:string   "CHAR(200)"
-   :password "CHAR(200)"
+  {:string   "VARCHAR(2048)"
+   :password "VARCHAR(512)"
    :boolean  "BOOLEAN"
    :int      "INTEGER"
    :long     "BIGINT"
    :decimal  "decimal(20,2)"
    :instant  "TIMESTAMP WITH TIME ZONE"
    :inst     "BIGINT"
-   :keyword  "CHAR(200)"
-   :symbol   "CHAR(200)"
+   ;; There is no standard SQL enum, and many ppl think they are a bad idea in general. Given
+   ;; that we have other ways of enforcing them we use a standard type instead.
+   :enum     "VARCHAR(200)"
+   :keyword  "VARCHAR(200)"
+   :symbol   "VARCHAR(200)"
    :uuid     "UUID"})
 
 (>defn sql-type [{::attr/keys    [type]
@@ -31,8 +35,8 @@
   [::attr/attribute => string?]
   (if (#{:string :password :keyword :symbol} type)
     (if max-length
-      (str "CHAR(" max-length ")")
-      "CHAR(200)")
+      (str "VARCHAR(" max-length ")")
+      "VARCHAR(200)")
     (if-let [result (get type-map type)]
       result
       (do
@@ -56,11 +60,11 @@
   [string? string? ::attr/attribute => map?]
   {:type :ref :table table :column column :attr attr})
 
-(defmulti op->sql (fn [k->attr {:keys [type]}] type))
+(defmulti op->sql (fn [k->attr adapter {:keys [type]}] type))
 
-(defmethod op->sql :table [_ {:keys [table]}] (format "CREATE TABLE IF NOT EXISTS %s ();\n" table))
+(defmethod op->sql :table [_ adapter {:keys [table]}] (format "CREATE TABLE IF NOT EXISTS %s ();\n" table))
 
-(defmethod op->sql :ref [k->attr {:keys [table column attr]}]
+(defmethod op->sql :ref [k->attr adapter {:keys [table column attr]}]
   (let [{::attr/keys [cardinality target identities qualified-key]} attr
         target-attr (k->attr target)]
     (if (= :many cardinality)
@@ -74,7 +78,7 @@
                      column              (sql.schema/column-name k->attr attr)
                      index-name          (str column "_idx")]
           (str
-            (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s);\n"
+            (vendor/add-referential-column-statement adapter
               table column (sql-type reverse-target-attr) rev-target-table rev-target-column)
             (format "CREATE INDEX IF NOT EXISTS %s ON %s(%s);\n"
               index-name table column))
@@ -86,13 +90,13 @@
                    target-type   (sql-type target-attr)
                    index-name    (str column "_idx")]
         (str
-          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s);\n"
+          (vendor/add-referential-column-statement adapter
             origin-table origin-column target-type target-table target-column)
           (format "CREATE INDEX IF NOT EXISTS %s ON %s(%s);\n"
             index-name table column))
         (throw (ex-info "Cannot create to-many reference column." {:k qualified-key}))))))
 
-(defmethod op->sql :id [k->attr {:keys [table column attr]}]
+(defmethod op->sql :id [k->attr adapter {:keys [table column attr]}]
   (let [{::attr/keys [type]} attr
         index-name    (str table "_" column "_idx")
         sequence-name (str table "_" column "_seq")
@@ -108,16 +112,9 @@
       (format "CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s(%s);\n"
         index-name table column))))
 
-(defmethod op->sql :column [key->attr {:keys [table column attr]}]
+(defmethod op->sql :column [key->attr adapter {:keys [table column attr]}]
   (let [{::attr/keys [type enumerated-values]} attr]
-    (if (= :enum type)
-      (let [enums (str/join "," (map #(str "'" % "'") enumerated-values))]
-        (if (seq enumerated-values)
-          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s ENUM(%s);\n" table column enums)
-          (do
-            (log/error "Enumeration is missing `::attr/enumerated-values`. Cannot create column in database.")
-            "")))
-      (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table column (sql-type attr)))))
+    (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table column (sql-type attr))))
 
 (defn attr->ops [schema-name key->attribute {::attr/keys [qualified-key type identity? identities]
                                              :keys       [::attr/schema]
@@ -141,12 +138,12 @@
 
 (>defn automatic-schema
   "Returns SQL schema for all attributes that support it."
-  [schema-name attributes]
-  [keyword? ::attr/attributes => (s/coll-of string?)]
+  [schema-name adapter attributes]
+  [keyword? ::vendor/adapter ::attr/attributes => (s/coll-of string?)]
   (let [key->attribute (attr/attribute-map attributes)
         db-ops         (mapcat (partial attr->ops schema-name key->attribute) attributes)
         {:keys [id table column ref]} (group-by :type db-ops)
-        op             (partial op->sql key->attribute)
+        op             (partial op->sql key->attribute adapter)
         new-tables     (mapv op (set table))
         new-ids        (mapv op (set id))
         new-columns    (mapv op (set column))
@@ -156,10 +153,13 @@
 (defn migrate! [config all-attributes connection-pools]
   (let [database-map (some-> config ::rad.sql/databases)]
     (doseq [[dbkey dbconfig] database-map]
-      (let [{:sql/keys    [auto-create-missing? schema]
+      (let [{:sql/keys    [auto-create-missing? schema vendor]
              :flyway/keys [migrate? migrations]} dbconfig
             ^HikariDataSource pool (get connection-pools dbkey)
-            db                     {:datasource pool}]
+            db                     {:datasource pool}
+            adapter                (case vendor
+                                     :postgresql (vendor/->PostgreSQLAdapter)
+                                     (vendor/->H2Adapter))]
         (if pool
           (cond
             (and migrate? (seq migrations))
@@ -173,7 +173,7 @@
                 (.migrate flyway)))
 
             auto-create-missing?
-            (let [stmts (automatic-schema schema all-attributes)]
+            (let [stmts (automatic-schema schema adapter all-attributes)]
               (log/info "Automatically trying to create SQL schema from attributes.")
               (doseq [s stmts]
                 (try

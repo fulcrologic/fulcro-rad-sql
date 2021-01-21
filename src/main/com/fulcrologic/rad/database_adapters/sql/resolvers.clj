@@ -23,7 +23,8 @@
     [com.fulcrologic.rad.ids :as ids]
     [clojure.string :as str]
     [clojure.set :as set]
-    [edn-query-language.core :as eql]))
+    [edn-query-language.core :as eql]
+    [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Reads
@@ -49,12 +50,12 @@
      ::pc/batch?  true
      ::pc/resolve (fn [env input]
                     (auth/redact env
-                      (entity-query
-                        (assoc env
-                          ::attr/id-attribute id-attribute
-                          ::attr/schema schema
-                          ::rad.sql/default-query outputs)
-                        input)))
+                      (log/spy :trace (entity-query
+                                        (assoc env
+                                          ::attr/id-attribute id-attribute
+                                          ::attr/schema schema
+                                          ::rad.sql/default-query outputs)
+                                        (log/spy :trace input)))))
      ::pc/input   #{id-key}}
     (log/error
       "Unable to generate id-resolver. Attribute was missing schema, "
@@ -87,6 +88,15 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Writes
+
+(defn resolve-tempid-in-value [tempids v]
+  (cond
+    (tempid/tempid? v) (get tempids v v)
+    (eql/ident? v) (let [[k id] v]
+                     (if (tempid/tempid? id)
+                       [k (get tempids id id)]
+                       v))
+    :else v))
 
 (def keys-in-delta
   (fn keys-in-delta [delta]
@@ -144,8 +154,10 @@
                               (fn [k] (table-local-attr key->attribute k))
                               (keys diff))
               new-val       (fn [{::attr/keys [qualified-key] :as attr}]
-                              (some->> (get-in diff [qualified-key :after])
-                                (form->sql-value attr)))
+                              (log/spy :trace qualified-key)
+                              (let [v (get-in diff [qualified-key :after])
+                                    v (resolve-tempid-in-value tempids v)]
+                                (form->sql-value attr v)))
               column-names  (str/join "," (into [(sql.schema/column-name id-attr)]
                                             (keep (fn [attr]
                                                     (when-not (nil? (new-val attr))
@@ -160,13 +172,14 @@
                               ::rad.sql/keys [connection-pools]
                               :as            env} schema delta]
   (let [ds      (get connection-pools schema)
-        tempids (generate-tempids ds key->attribute delta)
+        tempids (log/spy :trace (generate-tempids ds key->attribute delta))
         stmts   (keep (fn [[ident diff]] (scalar-insert env schema tempids ident diff)) delta)]
     {:tempids        tempids
      :insert-scalars stmts}))
 
 (defn scalar-update
-  [{::attr/keys [key->attribute] :as env} schema-to-save [table id :as ident] diff]
+  [{::keys      [tempids]
+    ::attr/keys [key->attribute] :as env} schema-to-save [table id :as ident] diff]
   (when-not (tempid/tempid? id)
     (let [{::attr/keys [type schema] :as id-attr} (key->attribute table)]
       (when (= schema-to-save schema)
@@ -178,11 +191,12 @@
                              (some->> (get-in diff [qualified-key :before])
                                (form->sql-value attr)))
               new-val      (fn [{::attr/keys [qualified-key] :as attr}]
-                             (some->> (get-in diff [qualified-key :after])
-                               (form->sql-value attr)))
+                             (let [v (get-in diff [qualified-key :after])
+                                   v (resolve-tempid-in-value tempids v)]
+                               (form->sql-value attr v)))
               {:keys [columns values]} (reduce
                                          (fn [{:keys [columns values] :as result} attr]
-                                           (let [new      (new-val attr)
+                                           (let [new      (log/spy :trace (new-val attr))
                                                  col-name (sql.schema/column-name attr)
                                                  old      (old-val attr)]
                                              (cond
@@ -292,7 +306,7 @@
   "Does all the necessary operations to persist mutations from the
   form delta into the appropriate tables in the appropriate databases"
   [{::attr/keys    [key->attribute]
-    ::rad.sql/keys [connection-pools postgresql?]
+    ::rad.sql/keys [connection-pools adapters default-adapter]
     :as            env} {::rad.form/keys [delta]}]
   (let [schemas (schemas-for-delta env delta)
         result  (atom {:tempids {}})]
@@ -300,16 +314,17 @@
     (log/debug "SQL Save of delta " (with-out-str (pprint delta)))
     ;; TASK: Transaction should be opened on all databases at once, so that they all succeed or fail
     (doseq [schema (keys connection-pools)]
-      (let [ds             (get connection-pools schema)
+      (let [adapter        (get adapters schema default-adapter)
+            ds             (get connection-pools schema)
             ;; TASK: None of these are filtering by schema, though they have it as an arg
             {:keys [tempids insert-scalars]} (log/spy :trace (delta->scalar-inserts env schema delta)) ; any non-fk column with a tempid
-            update-scalars (log/spy :trace (delta->scalar-updates env schema delta)) ; any non-fk columns on entries with pre-existing id
+            update-scalars (log/spy :trace (delta->scalar-updates (assoc env ::tempids tempids) schema delta)) ; any non-fk columns on entries with pre-existing id
             update-refs    (log/spy :trace (delta->ref-updates env tempids schema delta)) ; all fk columns on entire delta
             steps          (concat insert-scalars update-scalars update-refs)]
         (jdbc/with-transaction [ds ds {:isolation :serializable}]
-          (when postgresql?
-            ;; allow relaxed FK constraints until end of txn
-            (jdbc/execute! ds (log/spy :trace ["SET CONSTRAINTS ALL DEFERRED"])))
+          ;; allow relaxed FK constraints until end of txn
+          (when adapter
+            (vendor/relax-constraints! adapter ds))
           (doseq [stmt-with-params steps]
             (log/debug stmt-with-params)
             (jdbc/execute! ds stmt-with-params)))
