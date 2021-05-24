@@ -160,4 +160,4 @@
                                     joins-to-run)]
         (if one?
           (first (vals results-by-id))
-          (vec (vals results-by-id)))))))
+          (mapv results-by-id ids))))))
