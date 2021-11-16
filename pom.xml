@@ -21,7 +21,7 @@
     <url>https://github.com/fulcrologic/fulcro-rad-sql</url>
     <connection>scm:git:git://github.com/fulcrologic/fulcro-rad-sql.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/fulcrologic/fulcro-rad-sql.git</developerConnection>
-    <tag></tag>
+    <tag/>
   </scm>
   <distributionManagement>
     <repository>
@@ -59,6 +59,10 @@
       <id>clojars</id>
       <url>https://repo.clojars.org/</url>
     </repository>
+    <repository>
+      <id>fulcrologic</id>
+      <url>https://mvn.fulcrologic.com</url>
+    </repository>
   </repositories>
   <dependencies>
     <dependency>
@@ -67,19 +71,14 @@
       <version>1.10.1</version>
     </dependency>
     <dependency>
-      <groupId>com.wsscode</groupId>
-      <artifactId>pathom</artifactId>
-      <version>2.2.31</version>
-    </dependency>
-    <dependency>
       <groupId>com.fulcrologic</groupId>
       <artifactId>fulcro-rad</artifactId>
-      <version>0.0.1-alpha-12</version>
+      <version>1.0.27</version>
     </dependency>
     <dependency>
       <groupId>com.fulcrologic</groupId>
       <artifactId>guardrails</artifactId>
-      <version>0.0.12</version>
+      <version>1.1.7</version>
     </dependency>
     <dependency>
       <groupId>com.zaxxer</groupId>
@@ -89,7 +88,7 @@
     <dependency>
       <groupId>edn-query-language</groupId>
       <artifactId>eql</artifactId>
-      <version>0.0.9</version>
+      <version>1.0.1</version>
     </dependency>
     <dependency>
       <groupId>com.taoensso</groupId>
