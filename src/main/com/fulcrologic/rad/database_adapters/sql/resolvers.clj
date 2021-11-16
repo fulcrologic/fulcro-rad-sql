@@ -9,7 +9,6 @@
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
-    [com.wsscode.pathom.connect :as pc]
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]
     [next.jdbc.sql :as jdbc.sql]
@@ -43,20 +42,20 @@
   (enc/if-let [id-key  (::attr/qualified-key id-attribute)
                outputs (attr/attributes->eql attributes)
                schema  (::attr/schema id-attribute)]
-    {::pc/sym     (symbol
-                    (str (namespace id-key))
-                    (str (name id-key) "-resolver"))
-     ::pc/output  outputs
-     ::pc/batch?  true
-     ::pc/resolve (fn [env input]
-                    (auth/redact env
-                      (log/spy :trace (entity-query
-                                        (assoc env
-                                          ::attr/id-attribute id-attribute
-                                          ::attr/schema schema
-                                          ::rad.sql/default-query outputs)
-                                        (log/spy :trace input)))))
-     ::pc/input   #{id-key}}
+    {:com.wsscode.pathom.connect/sym     (symbol
+                                           (str (namespace id-key))
+                                           (str (name id-key) "-resolver"))
+     :com.wsscode.pathom.connect/output  outputs
+     :com.wsscode.pathom.connect/batch?  true
+     :com.wsscode.pathom.connect/resolve (fn [env input]
+                                           (auth/redact env
+                                             (log/spy :trace (entity-query
+                                                               (assoc env
+                                                                 ::attr/id-attribute id-attribute
+                                                                 ::attr/schema schema
+                                                                 ::rad.sql/default-query outputs)
+                                                               (log/spy :trace input)))))
+     :com.wsscode.pathom.connect/input   #{id-key}}
     (log/error
       "Unable to generate id-resolver. Attribute was missing schema, "
       "or could not be found" (::attr/qualified-key id-attribute))))
