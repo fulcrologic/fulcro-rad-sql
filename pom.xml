@@ -4,7 +4,7 @@
   <groupId>com.fulcrologic</groupId>
   <artifactId>fulcro-rad-sql</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.6-alpha-SNAPSHOT</version>
+  <version>0.0.6-alpha</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
@@ -21,7 +21,7 @@
     <url>https://github.com/fulcrologic/fulcro-rad-sql</url>
     <connection>scm:git:git://github.com/fulcrologic/fulcro-rad-sql.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/fulcrologic/fulcro-rad-sql.git</developerConnection>
-    <tag/>
+    <tag>fulcro-rad-sql-0.0.6-alpha</tag>
   </scm>
   <distributionManagement>
     <repository>
