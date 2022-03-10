@@ -116,13 +116,15 @@
                    all-keys)]
     schemas))
 
-(defn- generate-tempids [ds key->attribute delta]
+(defn- generate-tempids [adapter ds key->attribute delta]
   (reduce
     (fn [result [table id]]
       (if (tempid/tempid? id)
         (let [{::attr/keys [type] :as id-attr} (key->attribute table)
               real-id (if (#{:int :long} type)
-                        (:id (first (jdbc/execute! ds [(format "SELECT NEXTVAL('%s') AS id" (sql.schema/sequence-name id-attr))])))
+                        (let [next-expr (vendor/next-value-for-sequence
+                                         adapter (sql.schema/sequence-name id-attr))]
+                          (:id (first (jdbc/execute! ds [next-expr]))))
                         (ids/new-uuid))]
           (assoc result id real-id))
         result))
@@ -171,10 +173,11 @@
         (log/debug "Schemas do not match. Not updating" ident)))))
 
 (defn delta->scalar-inserts [{::attr/keys    [key->attribute]
-                              ::rad.sql/keys [connection-pools]
+                              ::rad.sql/keys [connection-pools adapters default-adapter]
                               :as            env} schema delta]
   (let [ds      (get connection-pools schema)
-        tempids (log/spy :trace (generate-tempids ds key->attribute delta))
+        adapter (get adapters schema default-adapter)
+        tempids (log/spy :trace (generate-tempids adapter ds key->attribute delta))
         stmts   (keep (fn [[ident diff]] (scalar-insert env schema tempids ident diff)) delta)]
     {:tempids        tempids
      :insert-scalars stmts}))

@@ -34,6 +34,9 @@
                                               :h2 (do
                                                     (log/info k "using H2 Adapter for schema" schema)
                                                     (vendor/->H2Adapter))
+                                              :mssql (do
+                                                       (log/info k "using MS SQL Adapter for schema" schema)
+                                                       (vendor/->MSSQLAdapter))
                                               default-adapter)]
                                 (assoc acc schema adapter)))
                             {}
