@@ -42,7 +42,7 @@
   (enc/if-let [id-key  (::attr/qualified-key id-attribute)
                outputs (attr/attributes->eql attributes)
                schema  (::attr/schema id-attribute)]
-    (let [transform (::pc/transform id-attribute)]
+    (let [transform (:com.wsscode.pathom.connect/transform id-attribute)]
       (cond-> {:com.wsscode.pathom.connect/sym     (symbol
                                                      (str (namespace id-key))
                                                      (str (name id-key) "-resolver"))
