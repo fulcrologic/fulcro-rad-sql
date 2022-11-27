@@ -30,6 +30,19 @@
     (boolean? v) v
     :else (str "'" v "'")))
 
+(defn group-join-results
+  "Takes result of join query in format [{:c0 a, :c1 b}] and transforms it into
+  format [{:c0 a, :c1 [b ...]}]"
+  [result]
+  (->> result
+       (reduce (fn [acc {:keys [c0 c1]}]
+                 (update acc c0 #(conj! (or % (transient [])) c1)))
+               {})
+       (reduce-kv (fn [acc c0 c1ts]
+                    (conj! acc {:c0 c0, :c1 (persistent! c1ts)}))
+                  (transient []))
+       persistent!))
+
 (>defn to-many-join-column-query
   [{::attr/keys [key->attribute] :as env} {::attr/keys [target cardinality identities qualified-key] :as attr} ids]
   [any? ::attr/attribute coll? => (? (s/tuple string? ::attr/attributes))]
@@ -46,7 +59,7 @@
                    table               (table-name key->attribute target-attr) ; address
                    target-id-column    (column-name target-attr) ; id
                    id-list             (str/join "," (map q ids))]
-        [(format "SELECT %1$s.%2$s AS c0, array_agg(%3$s.%4$s) AS c1 FROM %1$s LEFT JOIN %3$s ON %1$s.%2$s = %3$s.%5$s WHERE %1$s.%2$s IN (%6$s) GROUP BY %1$s.%2$s"
+        [(format "SELECT %1$s.%2$s AS c0, %3$s.%4$s AS c1 FROM %1$s LEFT JOIN %3$s ON %1$s.%2$s = %3$s.%5$s WHERE %1$s.%2$s IN (%6$s)"
            rev-target-table rev-target-column table target-id-column column id-list)
          [reverse-target-attr attr]]
         (throw (ex-info "Cannot create to-many reference column." {:k qualified-key}))))))
@@ -153,7 +166,8 @@
             results-by-id         (reduce
                                     (fn [result [join-query join-attributes]]
                                       (let [join-rows         (log/spy :debug (sql/query datasource [join-query] {:builder-fn row-builder}))
-                                            join-eql-results  (log/spy :debug (sql-results->edn-results join-rows join-attributes))
+                                            join-rows-groups  (log/spy :debug (group-join-results join-rows))
+                                            join-eql-results  (log/spy :debug (sql-results->edn-results join-rows-groups join-attributes))
                                             join-result-by-id (log/spy :debug (enc/keys-by id-key join-eql-results))]
                                         (deep-merge result join-result-by-id)))
                                     base-result-map-by-id
