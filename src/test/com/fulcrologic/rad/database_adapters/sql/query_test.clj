@@ -34,7 +34,7 @@
                          [1 2 3])]
     (assertions
       "Generates the correct SQL"
-      actual => "SELECT accounts.id AS c0, array_agg(addresses.id) AS c1 FROM accounts LEFT JOIN addresses ON accounts.id = addresses.accounts_addresses_accounts_id WHERE accounts.id IN (1,2,3) GROUP BY accounts.id"
+      actual => "SELECT accounts.id AS c0, addresses.id AS c1 FROM accounts JOIN addresses ON accounts.id = addresses.accounts_addresses_accounts_id WHERE accounts.id IN (1,2,3)"
       "Returns the attributes in the order they appear in the query"
       attrs => [attrs/account-id attrs/account-addresses])))
 
