@@ -59,7 +59,7 @@
                    table               (table-name key->attribute target-attr) ; address
                    target-id-column    (column-name target-attr) ; id
                    id-list             (str/join "," (map q ids))]
-        [(format "SELECT %1$s.%2$s AS c0, %3$s.%4$s AS c1 FROM %1$s LEFT JOIN %3$s ON %1$s.%2$s = %3$s.%5$s WHERE %1$s.%2$s IN (%6$s)"
+        [(format "SELECT %1$s.%2$s AS c0, %3$s.%4$s AS c1 FROM %1$s JOIN %3$s ON %1$s.%2$s = %3$s.%5$s WHERE %1$s.%2$s IN (%6$s)"
            rev-target-table rev-target-column table target-id-column column id-list)
          [reverse-target-attr attr]]
         (throw (ex-info "Cannot create to-many reference column." {:k qualified-key}))))))
