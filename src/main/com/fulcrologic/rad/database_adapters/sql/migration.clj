@@ -105,12 +105,10 @@
       (if (#{:int :long} type)
         (str
           (format "CREATE SEQUENCE IF NOT EXISTS %s;\n" sequence-name)
-          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s DEFAULT nextval('%s');\n"
+          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s PRIMARY KEY DEFAULT nextval('%s');\n"
             table column typ sequence-name))
-        (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n"
-          table column typ sequence-name))
-      (format "CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s(%s);\n"
-        index-name table column))))
+        (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s PRIMARY KEY;\n"
+          table column typ)))))
 
 (defmethod op->sql :column [key->attr adapter {:keys [table column attr]}]
   (let [{::attr/keys [type enumerated-values]} attr]
