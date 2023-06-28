@@ -1,9 +1,9 @@
 (ns com.fulcrologic.rad.database-adapters.sql.connection
   (:require
     [com.fulcrologic.rad.database-adapters.sql.migration :as sql.migration]
-    [com.fulcrologic.rad.database-adapters.sql           :as rad.sql]
-    [taoensso.encore                                     :as enc]
-    [taoensso.timbre                                     :as log])
+    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
+    [taoensso.encore :as enc]
+    [taoensso.timbre :as log])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.util Properties)))
 
@@ -30,17 +30,17 @@
 
 (defn create-connection-pools! [config all-attributes]
   (enc/if-let [databases (get config ::rad.sql/databases)
-               pools (reduce
-                       (fn [pools [dbkey dbconfig]]
-                         (log/info (str "Creating connection pool for " dbkey))
-                         (assoc pools
-                           dbkey (create-pool (:hikaricp/config dbconfig))))
-                       {} databases)]
+               pools     (reduce
+                           (fn [pools [dbkey dbconfig]]
+                             (log/info (str "Creating connection pool for " dbkey))
+                             (assoc pools
+                               dbkey (create-pool (:hikaricp/config dbconfig))))
+                           {} databases)]
     (try
       (sql.migration/migrate! config all-attributes pools)
       pools
       (catch Throwable t
-        (log/error "DATABASE STARTUP FAILED: " t)
+        (log/error t "DATABASE STARTUP FAILED: ")
         (stop-connection-pools! pools)
         (throw t)))
     (do

@@ -13,7 +13,7 @@
 
 (>defn table-name
   "Get the table name for a given identity key"
-  ([key->attribute {::attr/keys    [identity? identities]
+  ([key->attribute {::attr/keys    [qualified-key identity? identities]
                     ::rad.sql/keys [table] :as attr}]
    [map? ::attr/attribute => string?]
    (if identity?
@@ -21,7 +21,9 @@
      (let [identity (first identities)
            id-attr  (key->attribute identity)]
        (when-not (= 1 (count identities))
-         (throw (ex-info "Cannot derive table name from ::attr/identities because there is more than one." {})))
+         (throw (ex-info "Cannot derive table name from ::attr/identities because there is more than one."
+                  {:attr attr
+                   :k    qualified-key})))
        (table-name id-attr))))
   ([{::attr/keys    [identity? qualified-key]
      ::rad.sql/keys [table]}]
