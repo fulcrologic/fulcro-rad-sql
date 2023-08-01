@@ -142,7 +142,7 @@
   (cond
     (and (= :ref type) (not= :many cardinality) (eql/ident? form-value)) (second form-value)
     form->sql-value (form->sql-value form-value)
-    (= type :enum) (str form-value)
+    (= type :enum) (when form-value (str form-value))
     :else form-value))
 
 (defn scalar-insert
