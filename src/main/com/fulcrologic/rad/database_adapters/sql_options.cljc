@@ -98,5 +98,5 @@
   :com.fulcrologic.rad.database-adapters.sql/delete-referent?)
 
 (def data-type
-  "Attribute option. Force a data type for the desired attribute when auto generating the database."
+  "Attribute option. Force a data type for the desired attribute when auto generating the database, takes a string."
   :com.fulcrologic.rad.database-adapters.sql/data-type)
