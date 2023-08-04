@@ -30,14 +30,10 @@
    :symbol   "VARCHAR(200)"
    :uuid     "UUID"})
 
-;; Add any additional data types you require here
-(def sql-type-map
-  {:text "TEXT"})
-
 (>defn sql-type [{::attr/keys    [type]
                   ::rad.sql/keys [data-type max-length]}]
        [::attr/attribute => string?]
-       (if-let [result (get sql-type-map data-type)]
+       (if-let [result data-type]
          result
          (if (#{:string :password :keyword :symbol} type)
            (if max-length
