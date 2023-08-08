@@ -96,3 +96,7 @@
    has been deleted. The reference on which this option lives is just being changed
    to point to a different thing."
   :com.fulcrologic.rad.database-adapters.sql/delete-referent?)
+
+(def data-type
+  "Attribute option. Force a data type for the desired attribute when auto generating the database, takes a string."
+  :com.fulcrologic.rad.database-adapters.sql/data-type)

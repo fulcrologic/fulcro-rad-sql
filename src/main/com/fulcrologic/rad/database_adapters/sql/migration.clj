@@ -31,17 +31,19 @@
    :uuid     "UUID"})
 
 (>defn sql-type [{::attr/keys    [type]
-                  ::rad.sql/keys [max-length]}]
-  [::attr/attribute => string?]
-  (if (#{:string :password :keyword :symbol} type)
-    (if max-length
-      (str "VARCHAR(" max-length ")")
-      "VARCHAR(200)")
-    (if-let [result (get type-map type)]
-      result
-      (do
-        (log/error "Unsupported type" type)
-        "TEXT"))))
+                  ::rad.sql/keys [data-type max-length]}]
+       [::attr/attribute => string?]
+       (if-let [result data-type]
+         result
+         (if (#{:string :password :keyword :symbol} type)
+           (if max-length
+             (str "VARCHAR(" max-length ")")
+             "VARCHAR(200)")
+           (if-let [result (get type-map type)]
+             result
+             (do
+               (log/error "Unsupported type" type)
+               "TEXT")))))
 
 (>defn new-table [table]
   [string? => map?]
