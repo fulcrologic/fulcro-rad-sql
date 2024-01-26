@@ -1,7 +1,7 @@
 (ns com.fulcrologic.rad.database-adapters.sql.result-set
   "This namespace provides some tools to work with jdbc result sets"
   (:require [next.jdbc.result-set :as jdbc.rs])
-  (:import (java.sql ResultSet ResultSetMetaData Array)))
+  (:import (java.sql Array ResultSet ResultSetMetaData)))
 
 
 (defn- get-column-names [^ResultSetMetaData meta opts]

@@ -1,8 +1,8 @@
 (ns com.fulcrologic.rad.database-adapters.sql.middleware
   (:require
     [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
-    [com.fulcrologic.rad.form :as form]
-    [com.fulcrologic.rad.database-adapters.sql.resolvers :as sql.resolvers]))
+    [com.fulcrologic.rad.database-adapters.sql.resolvers :as sql.resolvers]
+    [com.fulcrologic.rad.form :as form]))
 
 (defn wrap-sql-save
   "Form save middleware to accomplish SQL saves."

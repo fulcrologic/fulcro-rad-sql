@@ -1,6 +1,5 @@
 (ns com.fulcrologic.rad.database-adapters.sql.plugin
   (:require
-    [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
     [com.fulcrologic.rad.database-adapters.sql :as sql]
     [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
     [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]

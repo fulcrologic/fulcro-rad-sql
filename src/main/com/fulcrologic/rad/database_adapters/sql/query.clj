@@ -6,22 +6,20 @@
   - Building custom queries based of off RAD attributes
   - Persisting data based off submitted form deltas"
   (:require
+    [clojure.spec.alpha :as s]
+    [clojure.string :as str]
+    [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
+    [com.fulcrologic.guardrails.core :refer [=> >defn ?]]
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.schema :refer [column-name table-name]]
-    [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
-    [clojure.string :as str]
     [edn-query-language.core :as eql]
-    [next.jdbc.sql :as jdbc.sql]
-    [next.jdbc.sql.builder :as jdbc.builder]
-    [taoensso.encore :as enc]
-    [taoensso.timbre :as log]
-    [com.fulcrologic.guardrails.core :refer [>defn => | ?]]
-    [clojure.set :as set]
-    [clojure.spec.alpha :as s]
+    [next.jdbc.result-set :as rs]
+    [next.jdbc.sql]
     [next.jdbc.sql :as sql]
-    [next.jdbc.result-set :as rs])
-  (:import (java.sql ResultSet ResultSetMetaData Clob Types)))
+    [taoensso.encore :as enc]
+    [taoensso.timbre :as log])
+  (:import (java.sql ResultSet ResultSetMetaData Types)))
 
 (defn q [v]
   (cond

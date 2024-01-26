@@ -7,16 +7,8 @@
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
-    [next.jdbc.result-set :as rs]
     [taoensso.encore :as enc]
-    [taoensso.timbre :as log])
-  (:import
-    (java.sql Array)))
-
-(extend-protocol rs/ReadableColumn
-  Array
-  (read-column-by-label [^Array v _] (set (.getArray v)))
-  (read-column-by-index [^Array v _ _] (set (.getArray v))))
+    [taoensso.timbre :as log]))
 
 (>defn table-name
   "Get the table name for a given identity key"

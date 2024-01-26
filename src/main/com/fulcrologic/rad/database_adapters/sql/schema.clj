@@ -3,12 +3,11 @@
   attributes and their corresponding table / columns in the database."
   (:require
     [camel-snake-kebab.core :as csk]
-    [com.fulcrologic.guardrails.core :refer [>defn => |]]
-    [com.fulcrologic.rad.attributes :as attr]
-    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
-    [taoensso.timbre :as log]
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
+    [com.fulcrologic.guardrails.core :refer [=> >defn]]
+    [com.fulcrologic.rad.attributes :as attr]
+    [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [taoensso.encore :as enc]))
 
 (>defn table-name

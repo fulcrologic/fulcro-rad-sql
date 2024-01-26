@@ -1,18 +1,16 @@
 (ns com.fulcrologic.rad.database-adapters.sql.migration
   (:require
-    [clojure.pprint :refer [pprint]]
-    [next.jdbc :as jdbc]
-    [clojure.string :as str]
+    [clojure.spec.alpha :as s]
+    [com.fulcrologic.guardrails.core :refer [=> >defn]]
     [com.fulcrologic.rad.attributes :as attr]
-    [com.fulcrologic.guardrails.core :refer [>defn =>]]
-    [taoensso.encore :as enc]
-    [taoensso.timbre :as log]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
-    [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
-    [clojure.spec.alpha :as s])
-  (:import (org.flywaydb.core Flyway)
-           (com.zaxxer.hikari HikariDataSource)))
+    [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]
+    [next.jdbc :as jdbc]
+    [taoensso.encore :as enc]
+    [taoensso.timbre :as log])
+  (:import (com.zaxxer.hikari HikariDataSource)
+           (org.flywaydb.core Flyway)))
 
 (def type-map
   {:string   "VARCHAR(2048)"
