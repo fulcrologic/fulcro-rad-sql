@@ -1,29 +1,24 @@
 (ns com.fulcrologic.rad.database-adapters.sql.resolvers
   (:require
     [clojure.pprint :refer [pprint]]
-    [com.fulcrologic.rad.authorization :as auth]
+    [clojure.set :as set]
+    [clojure.string :as str]
+    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.rad.attributes :as attr]
-    [com.fulcrologic.rad.form :as rad.form]
-    [com.fulcrologic.rad.options-util :refer [?!]]
-    [com.fulcrologic.guardrails.core :refer [>defn => |]]
+    [com.fulcrologic.rad.authorization :as auth]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql.query :as sql.query]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
-    [taoensso.encore :as enc]
-    [taoensso.timbre :as log]
-    [next.jdbc.sql :as jdbc.sql]
-    [clojure.spec.alpha :as s]
-    [next.jdbc :as jdbc]
+    [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]
+    [com.fulcrologic.rad.form :as rad.form]
+    [com.fulcrologic.rad.ids :as ids]
 
     ;; IMPORTANT: This turns on instant coercion:
-    [next.jdbc.date-time]
-
-    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
-    [com.fulcrologic.rad.ids :as ids]
-    [clojure.string :as str]
-    [clojure.set :as set]
     [edn-query-language.core :as eql]
-    [com.fulcrologic.rad.database-adapters.sql.vendor :as vendor]))
+    [next.jdbc :as jdbc]
+    [next.jdbc.date-time]
+    [taoensso.encore :as enc]
+    [taoensso.timbre :as log]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Reads

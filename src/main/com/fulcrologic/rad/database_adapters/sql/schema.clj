@@ -37,8 +37,6 @@
   ([k->attr {:keys [::attr/identities ::rad.sql/table]}]
    (or table (get-in k->attr [(first identities) ::rad.sql/table]))))
 
-
-
 (defn column-name
   "Get the column name for the given attribute."
   ([k->attr {::attr/keys [identities cardinality type] :as attr}]
