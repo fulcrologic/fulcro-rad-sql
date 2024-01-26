@@ -1,5 +1,7 @@
 (ns com.fulcrologic.rad.database-adapters.sql-options
-  "Options supported by the SQL adapter")
+  "Options supported by the SQL adapter"
+  (:require
+    [com.fulcrologic.rad.options-util :refer [defoption]]))
 
 (def table
   "Attribute option. The name of the database table. Use on `ao/identity? true` attributes.
@@ -100,3 +102,12 @@
 (def data-type
   "Attribute option. Force a data type for the desired attribute when auto generating the database, takes a string."
   :com.fulcrologic.rad.database-adapters.sql/data-type)
+
+(defoption constraints
+  "A set of keywords or strings that indicate desired constraints. Different vendors may support different options.
+
+  If a string, may be appended directly to the constraint section of the column modification statement.
+
+  :unique - If set (not null), it must be unique in the table
+  :not-null - Cannot be null
+  ")

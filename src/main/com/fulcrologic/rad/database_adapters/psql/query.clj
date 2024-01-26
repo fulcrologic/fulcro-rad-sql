@@ -54,7 +54,9 @@
   "Generates a query that will get everything that isn't a ref"
   [env {id-key ::attr/qualified-key :as id-attr} attrs]
   [any? ::attr/attribute ::attr/attributes => (s/tuple string? ::attr/attributes)]
-  (let [attrs       (filter #(not= :ref (::attr/type %)) attrs)
+  (let [attrs       (filter #(or
+                               (not= :ref (::attr/type %))
+                               (not= :many (::attr/cardinality %))) attrs)
         table       (table-name id-attr)
         id-column   (column-name id-attr)
         table-attrs (into [id-attr]
@@ -150,7 +152,7 @@
             base-result-map-by-id (log/spy :debug (enc/keys-by id-key (log/spy :debug (sql-results->edn-results rows base-attributes))))
             results-by-id         (reduce
                                     (fn [result [join-query join-attributes]]
-                                      (let [join-rows         (log/spy :debug (sql/query datasource [join-query] {:builder-fn row-builder}))
+                                      (let [join-rows         (log/spy :debug (sql/query datasource [(log/spy :debug join-query)] {:builder-fn row-builder}))
                                             join-eql-results  (log/spy :debug (sql-results->edn-results join-rows join-attributes))
                                             join-result-by-id (log/spy :debug (enc/keys-by id-key join-eql-results))]
                                         (deep-merge result join-result-by-id)))

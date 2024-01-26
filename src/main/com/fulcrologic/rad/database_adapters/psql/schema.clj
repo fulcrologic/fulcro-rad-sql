@@ -6,6 +6,7 @@
     [com.fulcrologic.guardrails.core :refer [=> >defn]]
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
+    [com.fulcrologic.rad.database-adapters.sql-options :as so]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]))
@@ -171,7 +172,7 @@
             origin-table origin-column target-type target-table target-column)
           (format "CREATE INDEX IF NOT EXISTS %s ON %s(%s);\n"
             index-name table column))
-        (throw (ex-info "Cannot create to-many reference column." {:k qualified-key}))))))
+        (throw (ex-info "Cannot create to-one reference column." {:k qualified-key}))))))
 
 (defmethod op->sql :id [k->attr {:keys [table column attr]}]
   (let [{::attr/keys [type]} attr
@@ -188,8 +189,16 @@
           table column typ)))))
 
 (defmethod op->sql :column [key->attr {:keys [table column attr]}]
-  (let [{::attr/keys [type enumerated-values]} attr]
-    (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;\n" table column (sql-type attr))))
+  (let [{::attr/keys [type enumerated-values]} attr
+        constraints       (so/constraints attr)
+        constraint-clause (str/join " " (map
+                                          (fn [c]
+                                            (cond
+                                              (string? c) c
+                                              (= :unique c) "UNIQUE"
+                                              (= :not-null c) "NOT NULL"))
+                                          constraints))]
+    (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s %s;\n" table column (sql-type attr) constraint-clause)))
 
 (defn attr->ops [schema-name key->attribute {::attr/keys [qualified-key type identity? identities]
                                              :keys       [::attr/schema]
