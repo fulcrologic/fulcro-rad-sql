@@ -100,9 +100,7 @@
    :double   "DOUBLE PRECISION"
    :instant  "TIMESTAMP WITH TIME ZONE"
    :inst     "BIGINT"
-   :enum     "INT"                                          ; These will be interned
-   :keyword  "INT"
-   :symbol   "INT"
+   :enum     "INT" ; as interned keywords
    :uuid     "UUID"})
 
 (>defn sql-type [{::attr/keys    [type cardinality]
