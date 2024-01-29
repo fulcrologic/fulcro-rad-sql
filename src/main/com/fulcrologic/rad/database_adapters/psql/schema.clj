@@ -5,6 +5,7 @@
     [clojure.string :as str]
     [com.fulcrologic.guardrails.core :refer [=> >defn]]
     [com.fulcrologic.rad.attributes :as attr]
+    [com.fulcrologic.rad.attributes-options :as ao]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql-options :as so]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
@@ -90,19 +91,18 @@
       (vals k->attr))))
 
 (def type-map
-  {:string    "text"
-   :password  "text"
-   :boolean   "BOOLEAN"
-   :int       "INTEGER"
-   :short     "SMALLINT"
-   :long      "BIGINT"
-   :decimal   "decimal(20,2)"
-   :double    "DOUBLE PRECISION"
-   :instant   "TIMESTAMP WITH TIME ZONE"
-   :inst      "BIGINT"
-   :enum      "INT"
-   :bitfields "int"
-   :uuid      "UUID"})
+  {:boolean  "BOOLEAN"
+   :decimal  "decimal(20,2)"
+   :double   "DOUBLE PRECISION"
+   :enum     "INT"
+   :inst     "BIGINT"
+   :instant  "TIMESTAMP WITH TIME ZONE"
+   :int      "INTEGER"
+   :long     "BIGINT"
+   :password "text"
+   :short    "SMALLINT"
+   :string   "text"
+   :uuid     "UUID"})
 
 (>defn sql-type [{::attr/keys    [type cardinality]
                   ::rad.sql/keys [data-type max-length]}]
@@ -141,6 +141,23 @@
 
 (defmethod op->sql :table [_ {:keys [table]}] (format "CREATE TABLE IF NOT EXISTS %s ();\n" table))
 
+(defn constraints-clause [attr cascade?]
+  (let [{::attr/keys [required? type]} attr
+        ref?              (= :ref type)
+        prefix            (cond-> ""
+                            (and ref? cascade?) (str "ON DELETE CASCADE")
+                            ref? (str " DEFERRABLE INITIALLY DEFERRED"))
+        constraints       (so/constraints attr)
+        constraint-clause (str prefix " "
+                            (str/join " " (map
+                                            (fn [c]
+                                              (cond
+                                                (string? c) c
+                                                (= :unique c) "UNIQUE"
+                                                (or required? (= :not-null c)) "NOT NULL"))
+                                            constraints)))]
+    constraint-clause))
+
 (defmethod op->sql :ref [k->attr {:keys [table column attr]}]
   (let [{::attr/keys [cardinality target identities qualified-key]} attr
         target-attr (k->attr target)]
@@ -153,22 +170,24 @@
                      rev-target-column   (sql.schema/column-name reverse-target-attr)
                      table               (sql.schema/table-name k->attr target-attr)
                      column              (sql.schema/column-name k->attr attr)
+                     constraint-clause   (constraints-clause attr (ao/component? attr))
                      index-name          (str column "_idx")]
           (str
-            (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s) DEFERRABLE INITIALLY DEFERRED;\n"
-              table column (sql-type reverse-target-attr) rev-target-table rev-target-column)
+            (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s) %s;\n"
+              table column (sql-type reverse-target-attr) rev-target-table rev-target-column constraint-clause)
             (format "CREATE INDEX IF NOT EXISTS %s ON %s(%s);\n"
               index-name table column))
           (throw (ex-info "Cannot create to-many reference column." {:k qualified-key}))))
-      (enc/if-let [origin-table  (sql.schema/table-name k->attr attr)
-                   origin-column (sql.schema/column-name attr)
-                   target-table  (sql.schema/table-name k->attr target-attr)
-                   target-column (sql.schema/column-name target-attr)
-                   target-type   (sql-type target-attr)
-                   index-name    (str column "_idx")]
+      (enc/if-let [origin-table      (sql.schema/table-name k->attr attr)
+                   origin-column     (sql.schema/column-name attr)
+                   target-table      (sql.schema/table-name k->attr target-attr)
+                   target-column     (sql.schema/column-name target-attr)
+                   target-type       (sql-type target-attr)
+                   constraint-clause (constraints-clause attr (ao/component? attr))
+                   index-name        (str column "_idx")]
         (str
-          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s) DEFERRABLE INITIALLY DEFERRED;\n"
-            origin-table origin-column target-type target-table target-column)
+          (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s REFERENCES %s(%s) %s;\n"
+            origin-table origin-column target-type target-table target-column constraint-clause)
           (format "CREATE INDEX IF NOT EXISTS %s ON %s(%s);\n"
             index-name table column))
         (throw (ex-info "Cannot create to-one reference column." {:k qualified-key}))))))
@@ -188,15 +207,8 @@
           table column typ)))))
 
 (defmethod op->sql :column [key->attr {:keys [table column attr]}]
-  (let [{::attr/keys [type enumerated-values]} attr
-        constraints       (so/constraints attr)
-        constraint-clause (str/join " " (map
-                                          (fn [c]
-                                            (cond
-                                              (string? c) c
-                                              (= :unique c) "UNIQUE"
-                                              (= :not-null c) "NOT NULL"))
-                                          constraints))]
+  (let [{::attr/keys [type enumerated-values required?]} attr
+        constraint-clause (constraints-clause attr false)]
     (format "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s %s;\n" table column (sql-type attr) constraint-clause)))
 
 (defn attr->ops [schema-name key->attribute {::attr/keys [qualified-key type identity? identities]
