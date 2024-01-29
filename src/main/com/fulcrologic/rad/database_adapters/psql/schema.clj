@@ -94,7 +94,7 @@
   {:boolean  "BOOLEAN"
    :decimal  "decimal(20,2)"
    :double   "DOUBLE PRECISION"
-   :enum     "INT"
+   :enum     "text"
    :inst     "BIGINT"
    :instant  "TIMESTAMP WITH TIME ZONE"
    :int      "INTEGER"
@@ -146,15 +146,17 @@
         ref?              (= :ref type)
         prefix            (cond-> ""
                             (and ref? cascade?) (str "ON DELETE CASCADE")
-                            ref? (str " DEFERRABLE INITIALLY DEFERRED"))
+                            ref? (str " DEFERRABLE INITIALLY DEFERRED")
+                            required? (str " NOT NULL"))
         constraints       (so/constraints attr)
         constraint-clause (str prefix " "
-                            (str/join " " (map
-                                            (fn [c]
-                                              (cond
-                                                (string? c) c
-                                                (= :unique c) "UNIQUE"
-                                                (or required? (= :not-null c)) "NOT NULL"))
+                            (str/join " " (into #{}
+                                            (map
+                                              (fn [c]
+                                                (cond
+                                                  (string? c) c
+                                                  (= :unique c) "UNIQUE"
+                                                  (and (not required?) (= :not-null c)) "NOT NULL")))
                                             constraints)))]
     constraint-clause))
 
