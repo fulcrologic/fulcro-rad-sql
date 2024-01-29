@@ -90,18 +90,19 @@
       (vals k->attr))))
 
 (def type-map
-  {:string   "text"
-   :password "text"
-   :boolean  "BOOLEAN"
-   :int      "INTEGER"
-   :short    "SMALLINT"
-   :long     "BIGINT"
-   :decimal  "decimal(20,2)"
-   :double   "DOUBLE PRECISION"
-   :instant  "TIMESTAMP WITH TIME ZONE"
-   :inst     "BIGINT"
-   :enum     "INT" ; as interned keywords
-   :uuid     "UUID"})
+  {:string    "text"
+   :password  "text"
+   :boolean   "BOOLEAN"
+   :int       "INTEGER"
+   :short     "SMALLINT"
+   :long      "BIGINT"
+   :decimal   "decimal(20,2)"
+   :double    "DOUBLE PRECISION"
+   :instant   "TIMESTAMP WITH TIME ZONE"
+   :inst      "BIGINT"
+   :enum      "INT"
+   :bitfields "int"
+   :uuid      "UUID"})
 
 (>defn sql-type [{::attr/keys    [type cardinality]
                   ::rad.sql/keys [data-type max-length]}]
