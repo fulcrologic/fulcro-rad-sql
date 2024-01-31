@@ -307,7 +307,8 @@
   form delta into the appropriate tables in the appropriate databases"
   [{::attr/keys    [key->attribute]
     ::rad.sql/keys [connection-pools]
-    :as            env} {::rad.form/keys [delta]}]
+    :as            env} {::rad.form/keys [delta] :as params}]
+  (log/spy :info params)
   (let [schemas (schemas-for-delta env delta)
         result  (atom {:tempids {}})]
     (log/debug "Saving form across " schemas)

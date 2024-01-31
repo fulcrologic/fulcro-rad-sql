@@ -8,9 +8,12 @@
     [com.fulcrologic.rad.attributes-options :as ao]
     [com.fulcrologic.rad.database-adapters.sql :as rad.sql]
     [com.fulcrologic.rad.database-adapters.sql-options :as so]
+    [com.fulcrologic.rad.database-adapters.sql.result-set :as sql.rs]
     [com.fulcrologic.rad.database-adapters.sql.schema :as sql.schema]
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]))
+
+(sql.rs/coerce-result-sets!)
 
 (>defn table-name
   "Get the table name for a given identity key"
